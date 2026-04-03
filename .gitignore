@@ -1,0 +1,53 @@
+@'
+# -----------------------------
+# Node / TypeScript
+# -----------------------------
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+coverage/
+.nyc_output/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# -----------------------------
+# Logs / runtime artifacts
+# -----------------------------
+*.log
+logs/
+tmp/
+temp/
+
+# -----------------------------
+# Spec Kit
+# Keep specs + memory tracked; ignore generated output
+# -----------------------------
+.specify/out/
+.specify/tmp/
+.specify/cache/
+
+# -----------------------------
+# VS Code / IDE
+# -----------------------------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# -----------------------------
+# OS
+# -----------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+'@ | Set-Content -Encoding utf8 .gitignore

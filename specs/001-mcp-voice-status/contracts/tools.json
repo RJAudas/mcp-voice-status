@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP Voice Status Tools",
+  "description": "MCP tool definitions for the Voice Status Server",
+  "version": "1.0.0",
+  "tools": [
+    {
+      "name": "register_callsign",
+      "description": "Register an agent call sign for spoken status messages. Call signs identify who is speaking and must be registered before using speak_status. Call signs are alphanumeric with optional hyphens, 1-20 characters.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "callSign": {
+            "type": "string",
+            "description": "The call sign to register (e.g., 'Copilot', 'Claude', 'Agent-7'). Must be alphanumeric with optional hyphens, 1-20 characters.",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$"
+          }
+        },
+        "required": ["callSign"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Whether registration succeeded"
+          },
+          "callSign": {
+            "type": "string",
+            "description": "The registered call sign"
+          },
+          "previousCallSign": {
+            "type": "string",
+            "description": "The previous call sign if one was replaced"
+          }
+        },
+        "required": ["success", "callSign"]
+      }
+    },
+    {
+      "name": "speak_status",
+      "description": "Speak a short status message using Windows text-to-speech. Messages are prefixed with the registered call sign and status phase. Rate limiting and deduplication are applied automatically to prevent audio spam.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "type": "string",
+            "enum": ["confirm", "waiting", "blocked", "done", "error"],
+            "description": "Status phase category: 'confirm' (acknowledge receipt), 'waiting' (blocked/waiting state), 'blocked' (external dependency blocking), 'done' (successful completion), 'error' (failure/exception)"
+          },
+          "message": {
+            "type": "string",
+            "description": "The message content to speak. Should be 1-2 sentences maximum, factual and concise.",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "callSign": {
+            "type": "string",
+            "description": "Optional call sign override. If not provided, uses the registered call sign.",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$"
+          }
+        },
+        "required": ["phase", "message"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "spoken": {
+            "type": "boolean",
+            "description": "Whether the message was actually spoken"
+          },
+          "skippedReason": {
+            "type": "string",
+            "enum": ["rate_limited", "deduplicated", "no_callsign"],
+            "description": "If not spoken, the reason why"
+          },
+          "cooldownMs": {
+            "type": "integer",
+            "description": "Remaining cooldown in milliseconds (if rate limited)"
+          },
+          "spokenText": {
+            "type": "string",
+            "description": "The full text that was spoken (for debugging)"
+          }
+        },
+        "required": ["spoken"]
+      }
+    }
+  ],
+  "examples": {
+    "register_callsign": [
+      {
+        "description": "Register a simple call sign",
+        "input": { "callSign": "Copilot" },
+        "output": { "success": true, "callSign": "Copilot" }
+      },
+      {
+        "description": "Replace existing call sign",
+        "input": { "callSign": "Claude" },
+        "output": { "success": true, "callSign": "Claude", "previousCallSign": "Copilot" }
+      }
+    ],
+    "speak_status": [
+      {
+        "description": "Confirm starting a task",
+        "input": { "phase": "confirm", "message": "Starting code review." },
+        "output": { "spoken": true, "spokenText": "Copilot: confirm. Starting code review." }
+      },
+      {
+        "description": "Report completion",
+        "input": { "phase": "done", "message": "Build completed successfully." },
+        "output": { "spoken": true, "spokenText": "Copilot: done. Build completed successfully." }
+      },
+      {
+        "description": "Rate limited message",
+        "input": { "phase": "update", "message": "Still processing." },
+        "output": { "spoken": false, "skippedReason": "rate_limited", "cooldownMs": 1500 }
+      },
+      {
+        "description": "Report an error",
+        "input": { "phase": "error", "message": "Failed to connect to database." },
+        "output": { "spoken": true, "spokenText": "Copilot: error. Failed to connect to database." }
+      }
+    ]
+  },
+  "errorResponses": {
+    "NO_CALLSIGN": {
+      "description": "No call sign registered. Call register_callsign first.",
+      "example": { "spoken": false, "skippedReason": "no_callsign" }
+    },
+    "INVALID_CALLSIGN": {
+      "description": "Call sign does not match required pattern (alphanumeric with hyphens, 1-20 chars)"
+    },
+    "INVALID_PHASE": {
+      "description": "Phase is not one of: confirm, waiting, blocked, done, error"
+    },
+    "INVALID_MESSAGE": {
+      "description": "Message is empty, too long (>200 chars), or contains only whitespace"
+    },
+    "TTS_FAILED": {
+      "description": "Windows text-to-speech failed. Check that audio output is available."
+    },
+    "TTS_TIMEOUT": {
+      "description": "TTS operation timed out (>30 seconds)"
+    }
+  }
+}
