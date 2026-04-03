@@ -1,249 +1,168 @@
-# MCP Voice Status Server
+# Voice Status Hooks
 
-A local-only MCP (Model Context Protocol) server that enables VS Code agents to emit short spoken status messages via Windows text-to-speech.
+Audible spoken status updates for GitHub Copilot agents on Windows — hands-free awareness of what your AI is doing.
+
+Hook scripts fire **automatically** at agent lifecycle points (session start/end, tool use, prompts, errors) and speak brief summaries via Windows built-in text-to-speech. **Zero agent cooperation needed** — no system prompt changes, no explicit tool calls, no Node.js.
 
 ## Features
 
-- 🗣️ **Spoken Status Updates** - Hear what your AI agent is doing without watching the screen
-- 🎯 **Call Sign Identification** - Each agent registers a unique identifier for multi-agent clarity
-- 🚦 **Status Phases** - Structured updates: confirm, waiting, blocked, done, error
-- ⏱️ **Rate Limiting** - Prevents audio spam (configurable cooldown per call sign)
-- 🔄 **Deduplication** - Automatically skips repeated identical messages
-- 🔒 **Local Only** - All processing happens locally via Windows System.Speech
+- 🗣️ **Session announcements** — Hear when a session starts, what task began, and when it ends
+- 🔧 **Tool completion summaries** — "Edited auth.ts", "15 tests passed", "Build succeeded"
+- 🔇 **Smart filtering** — Only speaks for meaningful actions; silently skips read-only tools (view, grep, glob)
+- ⏱️ **Rate limiting** — Default 3-second minimum interval prevents audio spam
+- 🔄 **Deduplication** — Identical messages within 10 seconds are silently dropped
+- ⚡ **Error bypass** — Errors are always spoken immediately, skipping rate limiting
+- ⚙️ **Configurable** — JSON config file + environment variable overrides
+- 🔒 **Local only** — Zero network calls; all processing on-device via Windows System.Speech
 
 ## Prerequisites
 
 - **Windows 10/11** (required for `System.Speech`)
-- **Node.js 20+** (LTS recommended)
-- **VS Code** with an MCP-compatible agent (GitHub Copilot, etc.)
+- **PowerShell 5.1** (ships with Windows 10+)
+- **GitHub Copilot** (cloud agent or CLI)
 - **Audio output** configured and working
 
 ## Installation
 
-### Option 1: Install from npm (recommended)
+1. **Copy** the `.github/hooks/` directory into your repository:
 
-```bash
-npm install -g mcp-voice-status
-```
+   ```powershell
+   # From this repo, copy to your target repo
+   Copy-Item -Recurse .github\hooks\ C:\path\to\your-repo\.github\hooks\
+   ```
 
-### Option 2: Build from source
+2. **Commit** the hooks to your default branch (required for Copilot cloud agent):
 
-```bash
-git clone https://github.com/your-username/mcp-voice-status.git
-cd mcp-voice-status
-npm install
-npm run build
-npm link  # Makes 'mcp-voice-status' available globally
-```
+   ```powershell
+   git add .github/hooks/
+   git commit -m "Add voice status hooks"
+   git push
+   ```
 
-## VS Code Configuration
+3. **Verify** TTS works:
 
-MCP servers are configured in `mcp.json`. You can add the server to your user configuration or workspace configuration.
+   ```powershell
+   Add-Type -AssemblyName System.Speech
+   $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
+   $s.Speak("Voice status hooks installed successfully")
+   ```
 
-### Option 1: User Configuration (recommended)
+For detailed setup instructions, see [docs/setup.md](docs/setup.md).
 
-1. Press `Ctrl+Shift+P` and run **"MCP: Open User Configuration"**
-2. Add the voice-status server to the `servers` object:
+## What You Will Hear
 
-```json
-{
-  "servers": {
-    "voice-status": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["C:/path/to/mcp-voice-status/dist/index.js"]
-    }
-  }
-}
-```
-
-### Option 2: Workspace Configuration
-
-1. Press `Ctrl+Shift+P` and run **"MCP: Open Workspace Folder Configuration"**
-2. Add the same configuration as above
-
-### Option 3: Using npx (no global install)
-
-```json
-{
-  "servers": {
-    "voice-status": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["mcp-voice-status"]
-    }
-  }
-}
-```
-
-### Option 4: Using global install
-
-If installed globally via `npm install -g mcp-voice-status`:
-
-```json
-{
-  "servers": {
-    "voice-status": {
-      "type": "stdio",
-      "command": "mcp-voice-status"
-    }
-  }
-}
-```
-
-## Quick Test
-
-After configuring VS Code:
-
-1. Press `Ctrl+Shift+P` and run **"MCP: List Servers"**
-2. Find `voice-status` and click **Start** (or restart VS Code)
-3. Open GitHub Copilot Chat
-4. Ask: *"Register call sign 'Copilot' and say hello"*
-5. You should hear: **"Copilot: confirm. Hello."**
-
-## Automatic Voice Status (Optional)
-
-By default, you need to explicitly ask the agent to use voice status. To make it automatic, add a **Copilot Instructions file** to your project:
-
-```markdown
-<!-- filepath: .github/copilot-instructions.md -->
-# Agent Instructions
-
-## Voice Status
-
-You have access to voice status tools. Use them to keep the user informed:
-
-1. At the start of any task, call `register_callsign` with "Copilot"
-2. Use `speak_status` to announce:
-   - `confirm` — when you start a task
-   - `waiting` — when you need user input
-   - `done` — when you complete a task
-   - `error` — if something fails
-
-Keep spoken messages brief (under 200 characters).
-```
-
-This file is automatically loaded by Copilot in that workspace, so the agent will use voice status without being asked.
-
-## Tools
-
-### `register_callsign`
-
-Register an agent identifier before speaking.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `callSign` | string | Yes | Alphanumeric + hyphens, 1-20 chars |
-
-**Example:**
-```
-Register call sign "Claude"
-```
-
-### `speak_status`
-
-Speak a status message.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `phase` | enum | Yes | `confirm`, `waiting`, `blocked`, `done`, `error` |
-| `message` | string | Yes | 1-2 sentences, max 200 chars |
-| `callSign` | string | No | Override the registered call sign |
-
-**Examples:**
-```
-# Acknowledge starting work
-speak_status(phase="confirm", message="Starting code review.")
-→ "Copilot: confirm. Starting code review."
-
-# Report completion
-speak_status(phase="done", message="All tests passing.")
-→ "Copilot: done. All tests passing."
-
-# Report an error
-speak_status(phase="error", message="Build failed. Missing dependency.")
-→ "Copilot: error. Build failed. Missing dependency."
-```
-
-## Status Phases
-
-| Phase | When to Use | Example |
-|-------|-------------|---------|
-| `confirm` | Acknowledge receipt of instruction | "Starting code review." |
-| `waiting` | Waiting for user input or approval | "Waiting for your confirmation." |
-| `blocked` | External dependency blocking progress | "Blocked on file access." |
-| `done` | Task completed successfully | "Refactoring complete." |
-| `error` | Something failed | "Error. Could not parse file." |
-
-## Rate Limiting & Deduplication
-
-The server automatically prevents audio spam:
-
-- **Rate limit**: Max 1 message per 3 seconds per call sign
-- **Deduplication**: Identical messages within 10 seconds are skipped
-
-If a message is skipped, the tool returns `spoken: false` with a reason:
-- `rate_limited` — wait for cooldown
-- `deduplicated` — same message already spoken recently
+| Event | Example Spoken Output |
+|-------|-----------------------|
+| Session starts | "Session started. Fix the auth bug in login" |
+| New prompt submitted | "New task: add unit tests for login" |
+| File edited | "Edited auth-controller.ts" |
+| File created | "Created test-helpers.ps1" |
+| Tests run | "15 tests passed" or "3 tests failed" |
+| Build completes | "Build succeeded" or "Build failed" |
+| Error occurs | "Error: TimeoutError. Network timeout after 30s" |
+| Session ends | "Session complete" or "Session aborted" |
+| Noisy tool (view/grep/glob) | *(silence)* |
 
 ## Configuration
 
-Environment variables for advanced configuration:
+Voice behavior is configured via `.github/hooks/scripts/voice-status-config.json`:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MCP_VOICE_RATE_LIMIT_MS` | `3000` | Minimum interval between messages (ms) |
-| `MCP_VOICE_DEDUP_WINDOW_MS` | `10000` | Deduplication window (ms) |
-| `MCP_VOICE_TTS_TIMEOUT_MS` | `30000` | TTS process timeout (ms) |
-| `MCP_VOICE_DEFAULT_CALLSIGN` | — | Default call sign if none registered |
+```json
+{
+  "interestingTools": ["edit", "create", "bash", "powershell", "write_powershell", "task"],
+  "noisyTools":       ["view", "grep", "glob", "read_powershell", "list_powershell", "web_fetch"],
+  "rateLimitMs":      3000,
+  "dedupWindowMs":    10000,
+  "ttsTimeoutMs":     30000,
+  "voiceRate":        0,
+  "voiceVolume":      100
+}
+```
+
+### Environment Variable Overrides
+
+For quick per-session tuning without editing the JSON file:
+
+| Variable | Config Key | Default | Description |
+|----------|-----------|---------|-------------|
+| `VOICE_STATUS_RATE_LIMIT_MS` | `rateLimitMs` | `3000` | Minimum ms between spoken messages |
+| `VOICE_STATUS_DEDUP_WINDOW_MS` | `dedupWindowMs` | `10000` | Window for dedup (ms) |
+| `VOICE_STATUS_TIMEOUT_MS` | `ttsTimeoutMs` | `30000` | TTS process max runtime (ms) |
+| `VOICE_STATUS_VOLUME` | `voiceVolume` | `100` | TTS volume (0–100) |
+| `VOICE_STATUS_RATE` | `voiceRate` | `0` | TTS speech rate (-10 to 10) |
+
+Example:
+```powershell
+$env:VOICE_STATUS_VOLUME = "70"
+$env:VOICE_STATUS_RATE_LIMIT_MS = "5000"
+```
+
+## Hook Events Reference
+
+| Hook Event | Script | Behavior |
+|-----------|--------|---------|
+| `sessionStart` | `on-session-start.ps1` | Speaks summary of initial prompt |
+| `sessionEnd` | `on-session-end.ps1` | Speaks completion reason |
+| `userPromptSubmitted` | `on-prompt-submitted.ps1` | Speaks new instruction summary |
+| `postToolUse` | `on-post-tool-use.ps1` | Speaks for interesting tools; silent for noisy |
+| `errorOccurred` | `on-error.ps1` | Speaks error name + message; bypasses rate limit |
+
+## Repository Structure
+
+```text
+.github/hooks/
+├── voice-status.json              # Hook configuration (Copilot hooks v1 protocol)
+└── scripts/
+    ├── voice-status-config.json   # Voice settings (tool lists, rate limits, voice prefs)
+    ├── voice-status-common.ps1    # Shared: TTS, sanitization, rate limiting, dedup, config
+    ├── on-session-start.ps1
+    ├── on-session-end.ps1
+    ├── on-prompt-submitted.ps1
+    ├── on-post-tool-use.ps1
+    └── on-error.ps1
+
+tests/                             # Pester 5.x test suite
+docs/
+├── setup.md                       # Step-by-step installation guide
+└── testing-guide.md               # Manual testing playbook with sample payloads
+```
+
+## Development & Testing
+
+Tests use [Pester 5.x](https://pester.dev/). Install if not present:
+
+```powershell
+Install-Module -Name Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck
+```
+
+Run all tests:
+
+```powershell
+Invoke-Pester -Path tests\ -Output Detailed
+```
+
+See [docs/testing-guide.md](docs/testing-guide.md) for manual testing with sample JSON payloads.
 
 ## Troubleshooting
 
-### No audio output
+**No audio heard:**
+- Run the TTS smoke test above
+- Check Windows audio output is not muted
+- Verify `Add-Type -AssemblyName System.Speech` succeeds in PowerShell
 
-1. Check Windows volume and audio output device
-2. Verify PowerShell TTS works:
-   ```powershell
-   Add-Type -AssemblyName System.Speech
-   (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak("Copilot confirm. Hello!")
-   ```
-   If you hear "Copilot confirm. Hello!" then TTS is working and the issue is with the MCP server connection.
+**Hooks not firing (cloud agent):**
+- Ensure `.github/hooks/voice-status.json` is committed to the default branch
+- Check the Copilot agent session logs for hook errors
 
-### "No call sign registered" error
+**Hooks not firing (CLI):**
+- Ensure `.github/hooks/voice-status.json` exists in the repository root
+- Run the CLI from the repo root directory
 
-Call `register_callsign` before `speak_status`. The call sign persists for the session.
-
-### Server not appearing in VS Code
-
-1. MCP servers are configured in `mcp.json`, **not** `settings.json`
-2. Run `Ctrl+Shift+P` → **"MCP: Open User Configuration"** to edit your config
-3. Run `Ctrl+Shift+P` → **"MCP: List Servers"** to see available servers
-4. Start the server from the list, or restart VS Code
-5. Check VS Code Output panel (select "MCP" from dropdown) for errors
-
-> **Note:** The old `github.copilot.chat.mcpServers` setting in `settings.json` is deprecated. Use `mcp.json` instead.
-
-### Messages cut off or not speaking
-
-- Ensure messages are under 200 characters
-- Check that messages contain actual text (not just whitespace)
-
-## Development
-
-```bash
-# Run in development mode (with hot reload)
-npm run dev
-
-# Run tests
-npm test
-
-# Lint code
-npm run lint
-
-# Build for production
-npm run build
+**PowerShell execution policy error:**
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE)

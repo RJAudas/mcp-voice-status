@@ -1,6 +1,5 @@
-@'
 # -----------------------------
-# Node / TypeScript
+# Node / TypeScript (legacy - kept for reference)
 # -----------------------------
 node_modules/
 dist/
@@ -28,6 +27,13 @@ tmp/
 temp/
 
 # -----------------------------
+# Voice Status state files (written to $env:TEMP at runtime, not tracked)
+# These are listed here for documentation; they live in the system temp dir
+# not in the repo, so no pattern needed. Kept as a note.
+# $env:TEMP/voice-status-state.json
+# -----------------------------
+
+# -----------------------------
 # Spec Kit
 # Keep specs + memory tracked; ignore generated output
 # -----------------------------
@@ -50,4 +56,3 @@ temp/
 .DS_Store
 Thumbs.db
 desktop.ini
-'@ | Set-Content -Encoding utf8 .gitignore

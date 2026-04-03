@@ -1,0 +1,23 @@
+{
+  "interestingTools": [
+    "edit",
+    "create",
+    "bash",
+    "powershell",
+    "write_powershell",
+    "task"
+  ],
+  "noisyTools": [
+    "view",
+    "grep",
+    "glob",
+    "read_powershell",
+    "list_powershell",
+    "web_fetch"
+  ],
+  "rateLimitMs": 3000,
+  "dedupWindowMs": 10000,
+  "ttsTimeoutMs": 30000,
+  "voiceRate": 0,
+  "voiceVolume": 100
+}
