@@ -97,7 +97,7 @@ As a developer, I want to hear when I submit a new prompt to the agent so I have
 
 **Acceptance Scenarios**:
 
-1. **Given** the developer submits a new prompt to the agent, **When** the postChatTurn hook fires for the user message, **Then** the user hears a brief summary (e.g., "New task: add unit tests for login")
+1. **Given** the developer submits a new prompt to the agent, **When** the userPromptSubmitted hook fires, **Then** the user hears a brief summary (e.g., "New task: add unit tests for login")
 
 ---
 

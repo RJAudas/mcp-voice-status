@@ -25,7 +25,7 @@ Pivot the mcp-voice-status project from a TypeScript MCP server to a pure PowerS
 
 | Principle | Status | Notes |
 |-----------|--------|-------|
-| I. Zero-Friction Adoption | ✅ PASS | Copy `.github/hooks/` into repo. No installers, no PATH edits. JSON config with defaults. |
+| I. Zero-Friction Adoption | ✅ PASS | Copy `.github/hooks/` into repo. No installers, no PATH edits. JSON config with defaults. Two JSON files exist: `voice-status.json` is protocol-required Copilot hooks infrastructure (not user-edited config); `voice-status-config.json` is the single user-facing settings file per Principle I.4. |
 | II. Agent-Invisible | ✅ PASS | Hooks fire automatically. Zero agent cooperation required. No system prompt changes. |
 | III. Local-Only and Private | ✅ PASS | All processing on-device. Zero network calls. Temp state files only, no persistent data beyond session. |
 | IV. Audio-First UX | ✅ PASS | Messages ≤200 chars, 1-2 sentences. Rate limiting (3s default, min 1s). Deduplication (10s window). Silence over noise as default. |
