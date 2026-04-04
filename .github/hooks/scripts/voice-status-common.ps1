@@ -121,21 +121,19 @@ function Invoke-Speech {
 
     $rate    = $Config.voiceRate
     $volume  = $Config.voiceVolume
-    $timeout = $Config.ttsTimeoutMs
 
-    # Build self-contained script block; uses SpeakAsync+WaitUntilDone for internal timeout (Constitution VI)
-    $scriptBlock = [ScriptBlock]::Create(@"
-Add-Type -AssemblyName System.Speech
-`$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
-`$synth.Rate = $rate
-`$synth.Volume = $volume
-`$synth.SpeakAsync('$Text') | Out-Null
-`$synth.WaitUntilDone($timeout)
-`$synth.Dispose()
-"@)
+    # Fire-and-forget: launch a detached powershell.exe with inline TTS command.
+    # Using -Command instead of -File avoids temp file creation and stdin interference.
+    $cmd = "Add-Type -AssemblyName System.Speech; " +
+           "`$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; " +
+           "`$s.Rate = $rate; " +
+           "`$s.Volume = $volume; " +
+           "`$s.Speak('$Text'); " +
+           "`$s.Dispose()"
 
-    # Fire-and-forget: hook exits immediately; job self-terminates after ttsTimeoutMs
-    Start-Job -ScriptBlock $scriptBlock | Out-Null
+    Start-Process -FilePath "powershell" `
+        -ArgumentList "-NonInteractive -NoProfile -ExecutionPolicy Bypass -Command `"$cmd`"" `
+        -WindowStyle Hidden
 }
 
 #endregion
@@ -144,15 +142,14 @@ Add-Type -AssemblyName System.Speech
 
 function Read-HookPayload {
     param(
-        # When provided (e.g. from $input in a PS pipeline), use it instead of [Console]::In.
-        # This enables both production use (hooks framework pipes OS stdin) and
-        # test use ($json | & script.ps1 uses PS pipeline via $input).
-        [string[]]$PipelineInput = $null
+        # Raw stdin string, read at script scope before any function calls.
+        # Console.In is empty inside functions (PS buffers stdin for $input on function entry).
+        # Each hook script reads stdin at the top level and passes it here.
+        [string]$RawInput = ''
     )
     try {
-        $raw = if ($null -ne $PipelineInput) { $PipelineInput -join [Environment]::NewLine } else { [Console]::In.ReadToEnd() }
-        if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-        return $raw | ConvertFrom-Json -ErrorAction Stop
+        if ([string]::IsNullOrWhiteSpace($RawInput)) { return $null }
+        return $RawInput | ConvertFrom-Json -ErrorAction Stop
     } catch {
         return $null
     }
@@ -201,9 +198,16 @@ function Get-FilenameFromArgs {
     param([string]$ToolArgs)
     if ([string]::IsNullOrWhiteSpace($ToolArgs)) { return $null }
     try {
-        $args = $ToolArgs | ConvertFrom-Json -ErrorAction Stop
+        $parsedArgs = $ToolArgs | ConvertFrom-Json -ErrorAction Stop
         # Try common field names for file path
-        $path = $args.path ?? $args.file_path ?? $args.filename ?? $args.target_file
+        $path = $null
+        foreach ($propertyName in @('path', 'file_path', 'filename', 'target_file')) {
+            $property = $parsedArgs.PSObject.Properties[$propertyName]
+            if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+                $path = [string]$property.Value
+                break
+            }
+        }
         if ($path) { return [System.IO.Path]::GetFileName($path) }
     } catch { }
     return $null

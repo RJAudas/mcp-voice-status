@@ -145,6 +145,8 @@ gh copilot suggest "fix the bug in auth.ts"
 
 ### PowerShell script won't run
 
+The hook configuration in this repo launches scripts with `-NoProfile -ExecutionPolicy Bypass`, so normal hook execution should work even if `CurrentUser` is `Restricted`. If you run the scripts directly in your own terminal, PowerShell will still apply your local policy.
+
 ```powershell
 # Allow local scripts to run
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned

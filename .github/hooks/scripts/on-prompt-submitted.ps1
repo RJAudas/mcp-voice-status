@@ -1,10 +1,15 @@
 # on-prompt-submitted.ps1
 # Hook: userPromptSubmitted — speaks a brief summary of the new instruction
 # Payload: { timestamp, cwd, prompt }
+param([string]$InputJson = '')
+
+if (-not $PSBoundParameters.ContainsKey('InputJson')) {
+    $InputJson = (New-Object System.IO.StreamReader([Console]::OpenStandardInput())).ReadToEnd()
+}
 
 . "$PSScriptRoot\voice-status-common.ps1"
 
-$payload = Read-HookPayload -PipelineInput @($input)
+$payload = Read-HookPayload -RawInput $rawStdin
 if ($null -eq $payload) { exit 0 }
 
 $config = Get-VoiceStatusConfig

@@ -1,10 +1,15 @@
 # on-error.ps1
 # Hook: errorOccurred — speaks error name and description, BYPASSES rate limiting (FR-009)
 # Payload: { timestamp, cwd, error: { name, message, stack } }
+param([string]$InputJson = '')
+
+if (-not $PSBoundParameters.ContainsKey('InputJson')) {
+    $InputJson = (New-Object System.IO.StreamReader([Console]::OpenStandardInput())).ReadToEnd()
+}
 
 . "$PSScriptRoot\voice-status-common.ps1"
 
-$payload = Read-HookPayload -PipelineInput @($input)
+$payload = Read-HookPayload -RawInput $rawStdin
 if ($null -eq $payload) { exit 0 }
 
 $config = Get-VoiceStatusConfig

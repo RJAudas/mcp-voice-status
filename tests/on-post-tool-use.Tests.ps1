@@ -22,31 +22,31 @@ Describe 'on-post-tool-use.ps1' {
             toolArgs   = '{"path":"src/auth.ts"}'
             toolResult = @{ resultType = 'success'; textResultForLlm = 'Updated.' }
         }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 silently for noisy tool (view)' {
         $json = New-MockPayload 'postToolUse' @{ toolName = 'view'; toolArgs = '{}' }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 silently for noisy tool (grep)' {
         $json = New-MockPayload 'postToolUse' @{ toolName = 'grep'; toolArgs = '{}' }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 silently for noisy tool (glob)' {
         $json = New-MockPayload 'postToolUse' @{ toolName = 'glob'; toolArgs = '{}' }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 silently for unrecognized tool name (FR-008)' {
         $json = New-MockPayload 'postToolUse' @{ toolName = 'unknown_future_tool'; toolArgs = '{}' }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
@@ -56,17 +56,17 @@ Describe 'on-post-tool-use.ps1' {
             toolArgs   = '{"command":"npm test"}'
             toolResult = @{ resultType = 'success'; textResultForLlm = '15 tests passed, 0 failed' }
         }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 with malformed JSON (no crash)' {
-        'bad json {{{' | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson 'bad json {{{'
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 with empty stdin' {
-        '' | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson ''
         $LASTEXITCODE | Should -Be 0
     }
 
@@ -79,7 +79,7 @@ Describe 'on-post-tool-use.ps1' {
             toolArgs   = '{}'
             toolResult = @{ resultType = 'failure'; textResultForLlm = 'Build failed' }
         }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 }

@@ -20,29 +20,29 @@ Describe 'on-session-start.ps1' {
 
     It 'speaks session started with initial prompt (source=new)' {
         $json = New-MockPayload 'sessionStart' @{ source = 'new'; initialPrompt = 'Fix the auth bug' }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-start.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-start.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 with missing/empty initialPrompt' {
         $json = New-MockPayload 'sessionStart' @{ initialPrompt = '' }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-start.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-start.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 with source=resume' {
         $json = New-MockPayload 'sessionStart' @{ source = 'resume'; initialPrompt = 'Resuming work on tests' }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-start.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-start.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 with malformed JSON (no crash)' {
-        'this is not json' | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-start.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-start.ps1") -InputJson 'this is not json'
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 with empty stdin' {
-        '' | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-start.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-start.ps1") -InputJson ''
         $LASTEXITCODE | Should -Be 0
     }
 }

@@ -158,7 +158,10 @@ See [docs/testing-guide.md](docs/testing-guide.md) for manual testing with sampl
 - Ensure `.github/hooks/voice-status.json` exists in the repository root
 - Run the CLI from the repo root directory
 
-**PowerShell execution policy error:**
+**PowerShell execution policy error during hook runs:**
+The bundled hook config already launches scripts with `-NoProfile -ExecutionPolicy Bypass`, so hook execution should not require a permanent machine-level policy change. If you still see this while using the hooks, make sure you are using the updated `.github/hooks/voice-status.json` from this repository.
+
+**PowerShell execution policy error during manual script runs:**
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```

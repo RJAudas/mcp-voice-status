@@ -18,36 +18,36 @@ Describe 'on-session-end.ps1' {
 
     It 'exits 0 for reason=complete' {
         $json = New-MockPayload 'sessionEnd' @{ reason = 'complete' }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-end.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-end.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 for reason=error' {
         $json = New-MockPayload 'sessionEnd' @{ reason = 'error' }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-end.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-end.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 for reason=abort' {
         $json = New-MockPayload 'sessionEnd' @{ reason = 'abort' }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-end.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-end.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 for reason=timeout' {
         $json = New-MockPayload 'sessionEnd' @{ reason = 'timeout' }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-end.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-end.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 for reason=user_exit' {
         $json = New-MockPayload 'sessionEnd' @{ reason = 'user_exit' }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-end.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-end.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 with malformed JSON (no crash)' {
-        'bad json' | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-end.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-end.ps1") -InputJson 'bad json'
         $LASTEXITCODE | Should -Be 0
     }
 }

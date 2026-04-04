@@ -1,10 +1,15 @@
 # on-post-tool-use.ps1
 # Hook: postToolUse — speaks tool completion summaries for interesting tools only
 # Payload: { timestamp, cwd, toolName, toolArgs, toolResult: { resultType, textResultForLlm } }
+param([string]$InputJson = '')
+
+if (-not $PSBoundParameters.ContainsKey('InputJson')) {
+    $InputJson = (New-Object System.IO.StreamReader([Console]::OpenStandardInput())).ReadToEnd()
+}
 
 . "$PSScriptRoot\voice-status-common.ps1"
 
-$payload = Read-HookPayload -PipelineInput @($input)
+$payload = Read-HookPayload -RawInput $rawStdin
 if ($null -eq $payload) { exit 0 }
 
 $config   = Get-VoiceStatusConfig

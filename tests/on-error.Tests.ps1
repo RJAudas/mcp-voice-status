@@ -20,13 +20,12 @@ Describe 'on-error.ps1' {
         $json = New-MockPayload 'errorOccurred' @{
             error = @{ name = 'TimeoutError'; message = 'Network timeout after 30s'; stack = '' }
         }
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-error.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-error.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 with missing error.name (graceful fallback)' {
-        '{"timestamp":"2026-01-01","cwd":".","error":{"message":"Something failed"}}' |
-            & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-error.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-error.ps1") -InputJson '{"timestamp":"2026-01-01","cwd":".","error":{"message":"Something failed"}}'
         $LASTEXITCODE | Should -Be 0
     }
 
@@ -39,17 +38,17 @@ Describe 'on-error.ps1' {
             error = @{ name = 'BuildError'; message = 'Compilation failed'; stack = '' }
         }
         # Should still exit 0 (not blocked) — rate limit bypass verified
-        $json | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-error.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-error.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 with malformed JSON (no crash)' {
-        'bad json' | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-error.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-error.ps1") -InputJson 'bad json'
         $LASTEXITCODE | Should -Be 0
     }
 
     It 'exits 0 with empty stdin' {
-        '' | & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-error.ps1")
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-error.ps1") -InputJson ''
         $LASTEXITCODE | Should -Be 0
     }
 }
