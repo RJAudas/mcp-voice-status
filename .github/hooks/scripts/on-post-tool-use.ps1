@@ -9,7 +9,7 @@ if (-not $PSBoundParameters.ContainsKey('InputJson')) {
 
 . "$PSScriptRoot\voice-status-common.ps1"
 
-$payload = Read-HookPayload -RawInput $rawStdin
+$payload = Read-HookPayload -RawInput $InputJson
 if ($null -eq $payload) { exit 0 }
 
 $config   = Get-VoiceStatusConfig
