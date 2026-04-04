@@ -183,7 +183,7 @@ function Get-ToolSummary {
             return 'File created'
         }
         { $_ -in @('bash', 'powershell', 'write_powershell', 'run_in_terminal') } {
-            return Get-CommandSummary $resultText
+            return Get-CommandSummary -Output $resultText -ToolArgs $ToolArgs
         }
         'task' {
             return 'Task completed'
@@ -214,7 +214,28 @@ function Get-FilenameFromArgs {
 }
 
 function Get-CommandSummary {
-    param([string]$Output)
+    param([string]$Output, [string]$ToolArgs)
+
+    # Use the goal or explanation field if present (run_in_terminal provides these)
+    if (-not [string]::IsNullOrWhiteSpace($ToolArgs)) {
+        try {
+            $parsedArgs = $ToolArgs | ConvertFrom-Json -ErrorAction Stop
+            $why = $null
+            foreach ($prop in @('goal', 'explanation')) {
+                $val = $parsedArgs.PSObject.Properties[$prop]
+                if ($null -ne $val -and -not [string]::IsNullOrWhiteSpace([string]$val.Value)) {
+                    $why = [string]$val.Value
+                    break
+                }
+            }
+            if ($why) {
+                # Still try to detect test/build results from output, prepend goal as context
+                $resultSummary = Get-OutputResultSummary $Output
+                if ($resultSummary) { return "$why. $resultSummary" }
+                return $why
+            }
+        } catch { }
+    }
 
     if ([string]::IsNullOrWhiteSpace($Output)) { return 'Command completed' }
 
@@ -254,6 +275,37 @@ function Get-CommandSummary {
     }
 
     return 'Command completed'
+}
+
+# Extract a structured result summary from command output (test/build/lint patterns).
+# Returns $null if no pattern matches — callers fall back to goal/explanation or generic message.
+function Get-OutputResultSummary {
+    param([string]$Output)
+    if ([string]::IsNullOrWhiteSpace($Output)) { return $null }
+
+    $o = $Output.ToLower()
+
+    if ($o -match '(\d+)\s+(?:tests?|specs?|examples?)\s+passed' -or
+        $o -match 'all\s+(\d+)\s+(?:tests?|specs?)\s+passed' -or
+        $o -match '(\d+)\s+passing') {
+        $passed = $Matches[1]
+        if ($o -match '(\d+)\s+(?:tests?|specs?|examples?)\s+failed' -or $o -match '(\d+)\s+failing') {
+            return "$passed passed, $($Matches[1]) failed"
+        }
+        return "$passed tests passed"
+    }
+    if ($o -match '(\d+)\s+(?:tests?|specs?|examples?)\s+failed' -or $o -match '(\d+)\s+failing') {
+        return "$($Matches[1]) tests failed"
+    }
+    if ($o -match 'build\s+succeeded' -or $o -match 'build\s+success') { return 'Build succeeded' }
+    if ($o -match 'build\s+failed' -or $o -match 'build\s+error') { return 'Build failed' }
+    if ($o -match '(\d+)\s+errors?,\s*(\d+)\s+warnings?') {
+        $e = $Matches[1]; $w = $Matches[2]
+        if ($e -eq '0' -and $w -eq '0') { return 'Lint passed' }
+        if ($e -eq '0') { return "Lint: $w warnings" }
+        return "Lint: $e errors, $w warnings"
+    }
+    return $null
 }
 
 #endregion
