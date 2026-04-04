@@ -1,5 +1,9 @@
 {
   "interestingTools": [
+    "replace_string_in_file",
+    "multi_replace_string_in_file",
+    "create_file",
+    "run_in_terminal",
     "edit",
     "create",
     "bash",
@@ -8,6 +12,12 @@
     "task"
   ],
   "noisyTools": [
+    "read_file",
+    "grep_search",
+    "file_search",
+    "semantic_search",
+    "list_dir",
+    "get_errors",
     "view",
     "grep",
     "glob",

@@ -172,17 +172,17 @@ function Get-ToolSummary {
     }
 
     switch ($ToolName) {
-        'edit' {
+        { $_ -in @('edit', 'replace_string_in_file', 'multi_replace_string_in_file') } {
             $filename = Get-FilenameFromArgs $ToolArgs
             if ($filename) { return "Edited $filename" }
             return 'File edited'
         }
-        'create' {
+        { $_ -in @('create', 'create_file') } {
             $filename = Get-FilenameFromArgs $ToolArgs
             if ($filename) { return "Created $filename" }
             return 'File created'
         }
-        { $_ -in @('bash', 'powershell', 'write_powershell') } {
+        { $_ -in @('bash', 'powershell', 'write_powershell', 'run_in_terminal') } {
             return Get-CommandSummary $resultText
         }
         'task' {
@@ -201,7 +201,7 @@ function Get-FilenameFromArgs {
         $parsedArgs = $ToolArgs | ConvertFrom-Json -ErrorAction Stop
         # Try common field names for file path
         $path = $null
-        foreach ($propertyName in @('path', 'file_path', 'filename', 'target_file')) {
+        foreach ($propertyName in @('filePath', 'path', 'file_path', 'filename', 'target_file')) {
             $property = $parsedArgs.PSObject.Properties[$propertyName]
             if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
                 $path = [string]$property.Value
