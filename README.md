@@ -36,6 +36,26 @@ npm run build
 npm link  # Makes 'mcp-voice-status' available globally
 ```
 
+### Option 3: Run from source with a launcher script
+
+Use the checked-in PowerShell launcher when you want VS Code to run the server straight from `src` instead of `dist`.
+
+Before using the launcher script:
+
+1. Install **Node.js 20+**
+2. Run `npm install` in the repo so `tsx` and the other local dependencies exist
+3. Run the script from **Windows PowerShell 5.1+** or **PowerShell 7+**
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-VoiceMcpFromSource.ps1
+```
+
+Add `-Watch` to restart the source server when files under `src` change:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-VoiceMcpFromSource.ps1 -Watch
+```
+
 ## VS Code Configuration
 
 MCP servers are configured in `mcp.json`. You can add the server to your user configuration or workspace configuration.
@@ -90,6 +110,31 @@ If installed globally via `npm install -g mcp-voice-status`:
   }
 }
 ```
+
+### Option 5: Run from source in VS Code
+
+Point VS Code at the launcher script if you want to develop against the source tree without rebuilding `dist`:
+
+```json
+{
+  "servers": {
+    "voice-status": {
+      "type": "stdio",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "C:\\path\\to\\mcp-voice-status\\scripts\\Start-VoiceMcpFromSource.ps1",
+        "-Watch"
+      ]
+    }
+  }
+}
+```
+
+`-Watch` restarts the source-backed server whenever files under `src` change. During active development, that is usually enough; if VS Code keeps an old MCP session around after a restart, run **"MCP: List Servers"** and restart `voice-status`.
 
 ## Quick Test
 
@@ -233,6 +278,12 @@ Call `register_callsign` before `speak_status`. The call sign persists for the s
 ```bash
 # Run in development mode (with hot reload)
 npm run dev
+
+# Run the source launcher once (no file watching)
+npm run start:source
+
+# Run the source launcher with refresh on code changes
+npm run start:source:watch
 
 # Run tests
 npm test
