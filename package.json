@@ -13,6 +13,7 @@
     "dev": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\Start-VoiceMcpFromSource.ps1 -Watch",
     "start:source": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\Start-VoiceMcpFromSource.ps1",
     "start:source:watch": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\Start-VoiceMcpFromSource.ps1 -Watch",
+    "setup:client": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\Install-VoiceStatusClientConfig.ps1",
     "test": "vitest",
     "test:run": "vitest run",
     "lint": "eslint src tests",

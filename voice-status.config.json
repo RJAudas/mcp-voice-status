@@ -16,6 +16,7 @@
       "progressMilestones": true,
       "waiting": true,
       "completion": true,
+      "outcomeNarration": true,
       "errors": true,
       "lowValueToolUpdates": false
     }

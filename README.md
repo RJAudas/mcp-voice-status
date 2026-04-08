@@ -56,9 +56,38 @@ Add `-Watch` to restart the source server when files under `src` change:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-VoiceMcpFromSource.ps1 -Watch
 ```
 
+### Option 4: Configure VS Code chat and Copilot CLI automatically
+
+Use the checked-in installer script to add the required MCP entries and ensure the repo instructions file exists:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-VoiceStatusClientConfig.ps1
+```
+
+By default this script:
+
+1. Creates or updates `.vscode\mcp.json` for VS Code chat in this repo
+2. Creates or updates `~\.copilot\mcp-config.json` for Copilot CLI
+3. Ensures `.github\copilot-instructions.md` exists in the repo
+
+Useful options:
+
+```powershell
+# Preview the files that would be changed
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-VoiceStatusClientConfig.ps1 -DryRun
+
+# Add the server to VS Code user config as well as the workspace config
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-VoiceStatusClientConfig.ps1 -VsCodeTarget Both
+
+# Use the source watcher for the registered server command
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-VoiceStatusClientConfig.ps1 -Watch
+```
+
 ## VS Code Configuration
 
 MCP servers are configured in `mcp.json`. You can add the server to your user configuration or workspace configuration.
+
+If you are working from this repository, the fastest path is to run `npm run setup:client` or `.\scripts\Install-VoiceStatusClientConfig.ps1`, which writes `.vscode\mcp.json` for you.
 
 ### Option 1: User Configuration (recommended)
 
@@ -138,7 +167,7 @@ Point VS Code at the launcher script if you want to develop against the source t
 
 ## Quick Test
 
-After configuring VS Code:
+After configuring VS Code and, if desired, Copilot CLI:
 
 1. Press `Ctrl+Shift+P` and run **"MCP: List Servers"**
 2. Find `voice-status` and click **Start** (or restart VS Code)
@@ -146,9 +175,16 @@ After configuring VS Code:
 4. Ask: *"Register call sign 'Copilot' and say hello"*
 5. You should hear: **"Copilot: confirm. Hello."**
 
+For Copilot CLI, restart the CLI after updating `~/.copilot/mcp-config.json`, then run `/mcp show voice-status` to confirm the server is available.
+
 ## Automatic Voice Status (Optional)
 
 The recommended approach is **instruction-driven, context-aware callouts**. Do **not** rely on hooks for prompt-progress speech; hooks fire without enough reasoning context and tend to produce worse callouts.
+
+The default behavior should cover both halves of a good status update:
+
+1. brief nudges while work is in progress
+2. a concise spoken outcome or answer when the task completes successfully
 
 This repo now ships two checked-in pieces for automatic behavior:
 
@@ -167,14 +203,15 @@ You have access to voice status tools. Use them to keep the user informed:
 
 1. Before using voice status, check `voice-status.config.json` in the repo root if it exists and honor its `automation` settings.
 2. At the start of a meaningful task, call `register_callsign` with the configured call sign (default: "Copilot").
-3. Use `speak_status` only for contextual callouts that help the user follow progress:
+3. Use `speak_status` only for contextual callouts that help the user follow progress and outcome:
    - `confirm` when you start a meaningful task or hit a real milestone
    - `waiting` when you need user input
    - `blocked` when an external dependency or constraint is stopping progress
-   - `done` when the task is complete
+   - `done` when the task is complete; when there is a concrete result or answer, prefer speaking that concise result summary in the `done` callout instead of only saying the task is complete
    - `error` when something fails
 4. Do **not** narrate every tool call, file read, or minor step unless the config explicitly allows low-value tool updates.
-5. Keep callouts factual, brief, and timely. Prefer silence over noisy commentary.
+5. When completion and outcome narration are enabled, successful tasks should end with a `done` callout. Use a generic completion line only if the actual result cannot be stated clearly within the message limit.
+6. Keep callouts factual, brief, and timely. Prefer silence over noisy commentary.
 
 Keep spoken messages brief and under 200 characters.
 ```
@@ -204,6 +241,7 @@ The checked-in config file is the single source of truth for default behavior:
       "progressMilestones": true,
       "waiting": true,
       "completion": true,
+      "outcomeNarration": true,
       "errors": true,
       "lowValueToolUpdates": false
     }
@@ -211,7 +249,7 @@ The checked-in config file is the single source of truth for default behavior:
 }
 ```
 
-`speech` settings are consumed by the server at startup. `automation` settings are intended for Copilot instructions and for future settings UI work, so one config surface can control both sides.
+`speech` settings are consumed by the server at startup. `automation` settings are intended for Copilot instructions and for future settings UI work, so one config surface can control both sides. `outcomeNarration` makes the completion expectation explicit: when a task has a concrete answer, the `done` callout should usually say the answer, not just announce completion.
 
 ## Tools
 
@@ -245,8 +283,8 @@ speak_status(phase="confirm", message="Starting code review.")
 → "Copilot: confirm. Starting code review."
 
 # Report completion
-speak_status(phase="done", message="All tests passing.")
-→ "Copilot: done. All tests passing."
+speak_status(phase="done", message="Main entrypoint: src\\index.ts, published as dist\\index.js.")
+→ "Copilot: done. Main entrypoint: src\index.ts, published as dist\index.js."
 
 # Report an error
 speak_status(phase="error", message="Build failed. Missing dependency.")
@@ -260,7 +298,7 @@ speak_status(phase="error", message="Build failed. Missing dependency.")
 | `confirm` | Acknowledge receipt of instruction | "Starting code review." |
 | `waiting` | Waiting for user input or approval | "Waiting for your confirmation." |
 | `blocked` | External dependency blocking progress | "Blocked on file access." |
-| `done` | Task completed successfully | "Refactoring complete." |
+| `done` | Task completed successfully; prefer the concise result or answer | "Main entrypoint: src\index.ts, published as dist\index.js." |
 | `error` | Something failed | "Error. Could not parse file." |
 
 ## Rate Limiting & Deduplication
@@ -339,6 +377,9 @@ npm run start:source
 
 # Run the source launcher with refresh on code changes
 npm run start:source:watch
+
+# Write VS Code workspace MCP config + Copilot CLI MCP config
+npm run setup:client
 
 # Show the launcher's resolved Node/config settings without starting the server
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-VoiceMcpFromSource.ps1 -DryRun

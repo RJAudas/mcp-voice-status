@@ -30,6 +30,7 @@ const voiceStatusConfigFileSchema = z.object({
       progressMilestones: z.boolean().optional(),
       waiting: z.boolean().optional(),
       completion: z.boolean().optional(),
+      outcomeNarration: z.boolean().optional(),
       errors: z.boolean().optional(),
       lowValueToolUpdates: z.boolean().optional(),
     }).partial().optional(),

@@ -19,6 +19,7 @@ describe('loadConfigFile', () => {
     const loadedConfig = loadConfigFile({}, 'D:\\dev\\mcp-voice-status');
     expect(loadedConfig.path).toMatch(/voice-status\.config\.json$/);
     expect(loadedConfig.config?.speech?.defaultCallSign).toBe('Copilot');
+    expect(loadedConfig.config?.automation?.callouts?.outcomeNarration).toBe(true);
     expect(loadedConfig.config?.automation?.callouts?.lowValueToolUpdates).toBe(false);
   });
 });
@@ -39,6 +40,7 @@ describe('mergeAutomationConfig', () => {
         callSign: 'Agent-7',
         callouts: {
           progressMilestones: false,
+          outcomeNarration: false,
           lowValueToolUpdates: true,
         },
       },
@@ -48,6 +50,7 @@ describe('mergeAutomationConfig', () => {
     expect(merged.callSign).toBe('Agent-7');
     expect(merged.callouts.taskStart).toBe(true);
     expect(merged.callouts.progressMilestones).toBe(false);
+    expect(merged.callouts.outcomeNarration).toBe(false);
     expect(merged.callouts.lowValueToolUpdates).toBe(true);
   });
 });

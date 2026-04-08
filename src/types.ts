@@ -257,6 +257,9 @@ export interface AutomationCalloutsConfig {
   /** Announce successful completion */
   completion: boolean;
 
+  /** Prefer narrating the concise result or answer in completion callouts */
+  outcomeNarration: boolean;
+
   /** Announce failures and blocked states */
   errors: boolean;
 
@@ -345,6 +348,7 @@ export const DEFAULT_AUTOMATION_CONFIG: AutomationConfig = {
     progressMilestones: true,
     waiting: true,
     completion: true,
+    outcomeNarration: true,
     errors: true,
     lowValueToolUpdates: false,
   },
