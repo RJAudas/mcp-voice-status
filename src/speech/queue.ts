@@ -27,13 +27,15 @@ export class SpeechQueue {
   async enqueue(
     text: string,
     callSign: string,
-    phase: StatusPhase
+    phase: StatusPhase,
+    ttsConfig?: SpeechQueueItem['ttsConfig']
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const item: SpeechQueueItem = {
         text,
         callSign,
         phase,
+        ttsConfig,
         queuedAt: Date.now(),
         resolve,
         reject,
@@ -62,7 +64,7 @@ export class SpeechQueue {
     }
 
     try {
-      await speakText(item.text);
+      await speakText(item.text, item.ttsConfig);
       item.resolve();
     } catch (error) {
       item.reject(error instanceof Error ? error : new Error(String(error)));

@@ -4,6 +4,7 @@ param(
     [switch]$Watch,
     [string]$NodePath,
     [string]$DefaultCallSign,
+    [string]$ConfigPath,
     [switch]$DryRun
 )
 
@@ -98,6 +99,7 @@ function Assert-NodeVersion {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $tsxCliPath = Join-Path $repoRoot 'node_modules\tsx\dist\cli.mjs'
 $entryPointPath = Join-Path $repoRoot 'src\index.ts'
+$defaultConfigPath = Join-Path $repoRoot 'voice-status.config.json'
 
 if (-not (Test-Path -Path $tsxCliPath -PathType Leaf)) {
     throw "Missing tsx runtime at '$tsxCliPath'. Run 'npm install' first."
@@ -123,10 +125,22 @@ if ($DefaultCallSign) {
     $env:MCP_VOICE_DEFAULT_CALLSIGN = $DefaultCallSign
 }
 
+$resolvedConfigPath = $null
+if ($ConfigPath) {
+    $resolvedConfigPath = (Resolve-Path $ConfigPath).Path
+} elseif (Test-Path -Path $defaultConfigPath -PathType Leaf) {
+    $resolvedConfigPath = $defaultConfigPath
+}
+
+if ($resolvedConfigPath) {
+    $env:MCP_VOICE_CONFIG_PATH = $resolvedConfigPath
+}
+
 if ($DryRun) {
     [PSCustomObject]@{
         RepoRoot = $repoRoot
         NodePath = $resolvedNodePath
+        ConfigPath = $resolvedConfigPath
         EntryPoint = $entryPointPath
         TsxCliPath = $tsxCliPath
         Watch = [bool]$Watch

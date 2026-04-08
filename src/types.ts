@@ -175,6 +175,9 @@ export interface SpeechQueueItem {
   /** Status phase */
   phase: StatusPhase;
 
+  /** Optional TTS overrides for this queue item */
+  ttsConfig?: Partial<TTSConfig>;
+
   /** Timestamp when queued */
   queuedAt: number;
 
@@ -238,6 +241,61 @@ export interface TTSConfig {
 }
 
 /**
+ * Agent-facing automation settings for contextual spoken updates.
+ * These settings are intended for instructions and future UI surfaces.
+ */
+export interface AutomationCalloutsConfig {
+  /** Announce the start of a meaningful task */
+  taskStart: boolean;
+
+  /** Announce meaningful progress changes, not every tool call */
+  progressMilestones: boolean;
+
+  /** Announce when the agent is waiting on user input */
+  waiting: boolean;
+
+  /** Announce successful completion */
+  completion: boolean;
+
+  /** Announce failures and blocked states */
+  errors: boolean;
+
+  /** Whether to narrate low-value tool churn such as routine reads */
+  lowValueToolUpdates: boolean;
+}
+
+/**
+ * Instruction-driven automation configuration.
+ */
+export interface AutomationConfig {
+  /** Whether contextual voice automation is enabled */
+  enabled: boolean;
+
+  /** Automation mode, reserved for future expansion */
+  mode: 'instructions';
+
+  /** Preferred call sign for agent-authored updates */
+  callSign?: string;
+
+  /** Enabled contextual callout categories */
+  callouts: AutomationCalloutsConfig;
+}
+
+/**
+ * Checked-in configuration file structure.
+ */
+export interface VoiceStatusConfigFile {
+  speech?: Partial<TTSConfig> & {
+    defaultCallSign?: string;
+    rateLimitMs?: number;
+    dedupWindowMs?: number;
+  };
+  automation?: Partial<Omit<AutomationConfig, 'callouts'>> & {
+    callouts?: Partial<AutomationCalloutsConfig>;
+  };
+}
+
+/**
  * Server configuration options.
  */
 export interface ServerConfig {
@@ -275,6 +333,20 @@ export const DEFAULT_CONFIG: ServerConfig = {
     timeoutMs: 30000,
     rate: 0,
     volume: 100,
+  },
+};
+
+export const DEFAULT_AUTOMATION_CONFIG: AutomationConfig = {
+  enabled: true,
+  mode: 'instructions',
+  callSign: 'Copilot',
+  callouts: {
+    taskStart: true,
+    progressMilestones: true,
+    waiting: true,
+    completion: true,
+    errors: true,
+    lowValueToolUpdates: false,
   },
 };
 

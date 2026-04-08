@@ -1,0 +1,23 @@
+{
+  "speech": {
+    "defaultCallSign": "Copilot",
+    "rateLimitMs": 3000,
+    "dedupWindowMs": 10000,
+    "timeoutMs": 30000,
+    "rate": 0,
+    "volume": 100
+  },
+  "automation": {
+    "enabled": true,
+    "mode": "instructions",
+    "callSign": "Copilot",
+    "callouts": {
+      "taskStart": true,
+      "progressMilestones": true,
+      "waiting": true,
+      "completion": true,
+      "errors": true,
+      "lowValueToolUpdates": false
+    }
+  }
+}

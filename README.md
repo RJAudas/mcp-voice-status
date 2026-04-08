@@ -148,7 +148,14 @@ After configuring VS Code:
 
 ## Automatic Voice Status (Optional)
 
-By default, you need to explicitly ask the agent to use voice status. To make it automatic, add a **Copilot Instructions file** to your project:
+The recommended approach is **instruction-driven, context-aware callouts**. Do **not** rely on hooks for prompt-progress speech; hooks fire without enough reasoning context and tend to produce worse callouts.
+
+This repo now ships two checked-in pieces for automatic behavior:
+
+1. `.github/copilot-instructions.md` teaches the agent when spoken updates are useful
+2. `voice-status.config.json` provides shared defaults for both the agent-facing behavior and the server runtime
+
+The instructions file should look like this:
 
 ```markdown
 <!-- filepath: .github/copilot-instructions.md -->
@@ -158,17 +165,53 @@ By default, you need to explicitly ask the agent to use voice status. To make it
 
 You have access to voice status tools. Use them to keep the user informed:
 
-1. At the start of any task, call `register_callsign` with "Copilot"
-2. Use `speak_status` to announce:
-   - `confirm` — when you start a task
-   - `waiting` — when you need user input
-   - `done` — when you complete a task
-   - `error` — if something fails
+1. Before using voice status, check `voice-status.config.json` in the repo root if it exists and honor its `automation` settings.
+2. At the start of a meaningful task, call `register_callsign` with the configured call sign (default: "Copilot").
+3. Use `speak_status` only for contextual callouts that help the user follow progress:
+   - `confirm` when you start a meaningful task or hit a real milestone
+   - `waiting` when you need user input
+   - `blocked` when an external dependency or constraint is stopping progress
+   - `done` when the task is complete
+   - `error` when something fails
+4. Do **not** narrate every tool call, file read, or minor step unless the config explicitly allows low-value tool updates.
+5. Keep callouts factual, brief, and timely. Prefer silence over noisy commentary.
 
-Keep spoken messages brief (under 200 characters).
+Keep spoken messages brief and under 200 characters.
 ```
 
-This file is automatically loaded by Copilot in that workspace, so the agent will use voice status without being asked.
+This file is automatically loaded by Copilot in that workspace, so the agent can make better, context-aware decisions about when to speak.
+
+### Shared `voice-status.config.json`
+
+The checked-in config file is the single source of truth for default behavior:
+
+```json
+{
+  "speech": {
+    "defaultCallSign": "Copilot",
+    "rateLimitMs": 3000,
+    "dedupWindowMs": 10000,
+    "timeoutMs": 30000,
+    "rate": 0,
+    "volume": 100
+  },
+  "automation": {
+    "enabled": true,
+    "mode": "instructions",
+    "callSign": "Copilot",
+    "callouts": {
+      "taskStart": true,
+      "progressMilestones": true,
+      "waiting": true,
+      "completion": true,
+      "errors": true,
+      "lowValueToolUpdates": false
+    }
+  }
+}
+```
+
+`speech` settings are consumed by the server at startup. `automation` settings are intended for Copilot instructions and for future settings UI work, so one config surface can control both sides.
 
 ## Tools
 
@@ -233,6 +276,12 @@ If a message is skipped, the tool returns `spoken: false` with a reason:
 
 ## Configuration
 
+Configuration precedence is:
+
+1. Built-in defaults
+2. `voice-status.config.json`
+3. Environment variables
+
 Environment variables for advanced configuration:
 
 | Variable | Default | Description |
@@ -240,7 +289,10 @@ Environment variables for advanced configuration:
 | `MCP_VOICE_RATE_LIMIT_MS` | `3000` | Minimum interval between messages (ms) |
 | `MCP_VOICE_DEDUP_WINDOW_MS` | `10000` | Deduplication window (ms) |
 | `MCP_VOICE_TTS_TIMEOUT_MS` | `30000` | TTS process timeout (ms) |
-| `MCP_VOICE_DEFAULT_CALLSIGN` | — | Default call sign if none registered |
+| `MCP_VOICE_TTS_RATE` | `0` | Windows TTS rate (`-10` to `10`) |
+| `MCP_VOICE_TTS_VOLUME` | `100` | Windows TTS volume (`0` to `100`) |
+| `MCP_VOICE_DEFAULT_CALLSIGN` | `Copilot` in config | Default call sign if none registered |
+| `MCP_VOICE_CONFIG_PATH` | `voice-status.config.json` in current working directory | Override the config file location |
 
 ## Troubleshooting
 
@@ -258,6 +310,8 @@ Environment variables for advanced configuration:
 
 Call `register_callsign` before `speak_status`. The call sign persists for the session.
 
+If you want automatic contextual callouts, make sure `.github/copilot-instructions.md` is present and that `voice-status.config.json` has automation enabled with a default call sign.
+
 ### Server not appearing in VS Code
 
 1. MCP servers are configured in `mcp.json`, **not** `settings.json`
@@ -272,6 +326,7 @@ Call `register_callsign` before `speak_status`. The call sign persists for the s
 
 - Ensure messages are under 200 characters
 - Check that messages contain actual text (not just whitespace)
+- If using a custom config file location, verify `MCP_VOICE_CONFIG_PATH` points at a valid JSON file
 
 ## Development
 
@@ -284,6 +339,9 @@ npm run start:source
 
 # Run the source launcher with refresh on code changes
 npm run start:source:watch
+
+# Show the launcher's resolved Node/config settings without starting the server
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-VoiceMcpFromSource.ps1 -DryRun
 
 # Run tests
 npm test

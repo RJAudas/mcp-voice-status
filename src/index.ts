@@ -14,6 +14,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
+import { getDefaultAutomationConfig, loadConfigFile, mergeAutomationConfig } from './config.js';
 import {
   createInitialState,
   DEFAULT_CONFIG,
@@ -48,6 +49,7 @@ function log(level: 'info' | 'warn' | 'error', message: string, data?: Record<st
 
 let serverState: ServerState = createInitialState();
 const serverConfig: ServerConfig = { ...DEFAULT_CONFIG };
+let automationConfig = getDefaultAutomationConfig();
 
 // Initialize middleware
 let rateLimiter = new RateLimiter(serverConfig.rateLimit.minIntervalMs);
@@ -63,11 +65,48 @@ export function resetServerState(): void {
   resetSpeechQueue();
 }
 
-// =============================================================================
-// Environment Configuration
-// =============================================================================
+function loadConfig(): void {
+  const loadedConfig = loadConfigFile();
+  if (loadedConfig.config) {
+    const { speech, automation } = loadedConfig.config;
 
-function loadConfigFromEnv(): void {
+    if (speech?.defaultCallSign) {
+      serverConfig.defaultCallSign = speech.defaultCallSign;
+    } else if (automation?.callSign) {
+      serverConfig.defaultCallSign = automation.callSign;
+    }
+
+    if (typeof speech?.rateLimitMs === 'number') {
+      serverConfig.rateLimit.minIntervalMs = speech.rateLimitMs;
+      rateLimiter = new RateLimiter(speech.rateLimitMs);
+    }
+
+    if (typeof speech?.dedupWindowMs === 'number') {
+      serverConfig.dedup.windowMs = speech.dedupWindowMs;
+      deduplicator = new Deduplicator(speech.dedupWindowMs);
+    }
+
+    if (typeof speech?.timeoutMs === 'number') {
+      serverConfig.tts.timeoutMs = speech.timeoutMs;
+    }
+
+    if (typeof speech?.rate === 'number') {
+      serverConfig.tts.rate = speech.rate;
+    }
+
+    if (typeof speech?.volume === 'number') {
+      serverConfig.tts.volume = speech.volume;
+    }
+
+    automationConfig = mergeAutomationConfig(automationConfig, loadedConfig.config);
+
+    log('info', 'Voice status config loaded from file', {
+      path: loadedConfig.path,
+      automationEnabled: automationConfig.enabled,
+      automationMode: automationConfig.mode,
+    });
+  }
+
   // MCP_VOICE_DEFAULT_CALLSIGN - default call sign if none registered
   const defaultCallSign = process.env['MCP_VOICE_DEFAULT_CALLSIGN'];
   if (defaultCallSign) {
@@ -99,6 +138,36 @@ function loadConfigFromEnv(): void {
       serverConfig.dedup.windowMs = parsed;
       deduplicator = new Deduplicator(parsed);
       log('info', 'Dedup window configured from environment', { windowMs: parsed });
+    }
+  }
+
+  // MCP_VOICE_TTS_TIMEOUT_MS - TTS process timeout
+  const ttsTimeoutMs = process.env['MCP_VOICE_TTS_TIMEOUT_MS'];
+  if (ttsTimeoutMs) {
+    const parsed = parseInt(ttsTimeoutMs, 10);
+    if (!isNaN(parsed) && parsed >= 1000) {
+      serverConfig.tts.timeoutMs = parsed;
+      log('info', 'TTS timeout configured from environment', { timeoutMs: parsed });
+    }
+  }
+
+  // MCP_VOICE_TTS_RATE - Windows TTS rate (-10 to 10)
+  const ttsRate = process.env['MCP_VOICE_TTS_RATE'];
+  if (ttsRate) {
+    const parsed = parseInt(ttsRate, 10);
+    if (!isNaN(parsed) && parsed >= -10 && parsed <= 10) {
+      serverConfig.tts.rate = parsed;
+      log('info', 'TTS rate configured from environment', { rate: parsed });
+    }
+  }
+
+  // MCP_VOICE_TTS_VOLUME - Windows TTS volume (0 to 100)
+  const ttsVolume = process.env['MCP_VOICE_TTS_VOLUME'];
+  if (ttsVolume) {
+    const parsed = parseInt(ttsVolume, 10);
+    if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+      serverConfig.tts.volume = parsed;
+      log('info', 'TTS volume configured from environment', { volume: parsed });
     }
   }
 }
@@ -269,7 +338,7 @@ server.tool(
     // Queue the speech
     try {
       const queue = getSpeechQueue();
-      await queue.enqueue(spokenText, effectiveCallSign, validatedPhase);
+      await queue.enqueue(spokenText, effectiveCallSign, validatedPhase, serverConfig.tts);
 
       // Record for rate limiting and deduplication
       rateLimiter.recordSpoken(effectiveCallSign);
@@ -312,14 +381,17 @@ server.tool(
 // =============================================================================
 
 async function main(): Promise<void> {
-  // Load configuration from environment
-  loadConfigFromEnv();
+  // Load checked-in config first, then allow env vars to override it.
+  loadConfig();
 
   log('info', 'MCP Voice Status server starting', {
     name: serverConfig.name,
     version: serverConfig.version,
     rateLimitMs: serverConfig.rateLimit.minIntervalMs,
     dedupWindowMs: serverConfig.dedup.windowMs,
+    ttsTimeoutMs: serverConfig.tts.timeoutMs,
+    automationEnabled: automationConfig.enabled,
+    automationMode: automationConfig.mode,
   });
 
   // Set up graceful shutdown
