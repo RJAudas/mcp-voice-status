@@ -22,11 +22,15 @@ Describe 'on-error.ps1' {
         }
         & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-error.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
+        $activity = Get-RepoActivityFromStateFile -Path $script:StateFile
+        $activity.latestOutcome | Should -Be 'Error: TimeoutError. Network timeout after 30s'
     }
 
     It 'exits 0 with missing error.name (graceful fallback)' {
         & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-error.ps1") -InputJson '{"timestamp":"2026-01-01","cwd":".","error":{"message":"Something failed"}}'
         $LASTEXITCODE | Should -Be 0
+        $activity = Get-RepoActivityFromStateFile -Path $script:StateFile -Cwd '.'
+        $activity.latestOutcome | Should -Be 'Error: Error. Something failed'
     }
 
     It 'bypasses rate limiting — speaks even when within rate limit window' {
@@ -40,6 +44,8 @@ Describe 'on-error.ps1' {
         # Should still exit 0 (not blocked) — rate limit bypass verified
         & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-error.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
+        $activity = Get-RepoActivityFromStateFile -Path $script:StateFile
+        $activity.latestOutcome | Should -Be 'Error: BuildError. Compilation failed'
     }
 
     It 'exits 0 with malformed JSON (no crash)' {

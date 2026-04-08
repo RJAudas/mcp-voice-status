@@ -14,6 +14,7 @@ if ($null -eq $payload) { exit 0 }
 
 $config = Get-VoiceStatusConfig
 
+$cwd = if ($payload.cwd) { [string]$payload.cwd } else { '' }
 $errorName = if ($payload.error -and $payload.error.name)    { [string]$payload.error.name    } else { 'Error' }
 $errorMsg  = if ($payload.error -and $payload.error.message) { [string]$payload.error.message } else { '' }
 
@@ -24,6 +25,8 @@ $snippet = if ($errorMsg -and $budget -gt 0) { " " + $errorMsg.Substring(0, [Mat
 $message = Sanitize-TextForTTS -Text ($prefix + $snippet)
 
 if ([string]::IsNullOrWhiteSpace($message)) { exit 0 }
+
+Update-RepoActivity -Cwd $cwd -Outcome $message | Out-Null
 
 # Errors BYPASS rate limiting (per clarification / FR-009)
 # Still check deduplication to avoid spamming repeated identical errors

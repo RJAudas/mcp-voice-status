@@ -24,40 +24,60 @@ Describe 'on-post-tool-use.ps1' {
         }
         & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
+        $activity = Get-RepoActivityFromStateFile -Path $script:StateFile
+        @($activity.milestones) | Should -Contain 'Edited auth.ts'
     }
 
     It 'exits 0 silently for noisy tool (view)' {
         $json = New-MockPayload 'postToolUse' @{ toolName = 'view'; toolArgs = '{}' }
         & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
+        Get-RepoActivityFromStateFile -Path $script:StateFile | Should -BeNullOrEmpty
     }
 
     It 'exits 0 silently for noisy tool (grep)' {
         $json = New-MockPayload 'postToolUse' @{ toolName = 'grep'; toolArgs = '{}' }
         & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
+        Get-RepoActivityFromStateFile -Path $script:StateFile | Should -BeNullOrEmpty
     }
 
     It 'exits 0 silently for noisy tool (glob)' {
         $json = New-MockPayload 'postToolUse' @{ toolName = 'glob'; toolArgs = '{}' }
         & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
+        Get-RepoActivityFromStateFile -Path $script:StateFile | Should -BeNullOrEmpty
     }
 
     It 'exits 0 silently for unrecognized tool name (FR-008)' {
         $json = New-MockPayload 'postToolUse' @{ toolName = 'unknown_future_tool'; toolArgs = '{}' }
         & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
+        Get-RepoActivityFromStateFile -Path $script:StateFile | Should -BeNullOrEmpty
     }
 
     It 'exits 0 for bash tool with test output' {
         $json = New-MockPayload 'postToolUse' @{
             toolName   = 'bash'
-            toolArgs   = '{"command":"npm test"}'
+            toolArgs   = '{"command":"npm test","description":"Run login tests"}'
             toolResult = @{ resultType = 'success'; textResultForLlm = '15 tests passed, 0 failed' }
         }
         & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
+        $activity = Get-RepoActivityFromStateFile -Path $script:StateFile
+        $activity.whySummary | Should -Be 'Run login tests'
+        $activity.latestOutcome | Should -Be 'Run login tests. 15 tests passed'
+    }
+
+    It 'exits 0 silently for generic command output without context' {
+        $json = New-MockPayload 'postToolUse' @{
+            toolName   = 'bash'
+            toolArgs   = '{"command":"echo ok"}'
+            toolResult = @{ resultType = 'success'; textResultForLlm = 'some arbitrary output' }
+        }
+        & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
+        $LASTEXITCODE | Should -Be 0
+        Get-RepoActivityFromStateFile -Path $script:StateFile | Should -BeNullOrEmpty
     }
 
     It 'exits 0 with malformed JSON (no crash)' {
@@ -76,10 +96,12 @@ Describe 'on-post-tool-use.ps1' {
         @{ lastSpokenAt = $now; recentMessages = @() } | ConvertTo-Json | Set-Content $script:StateFile
         $json = New-MockPayload 'postToolUse' @{
             toolName   = 'bash'
-            toolArgs   = '{}'
+            toolArgs   = '{"description":"Build project"}'
             toolResult = @{ resultType = 'failure'; textResultForLlm = 'Build failed' }
         }
         & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-post-tool-use.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
+        $activity = Get-RepoActivityFromStateFile -Path $script:StateFile
+        $activity.latestOutcome | Should -Be 'Build project. Build failed'
     }
 }

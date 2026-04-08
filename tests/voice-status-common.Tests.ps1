@@ -214,10 +214,16 @@ Describe 'Get-ToolSummary' {
         $result | Should -Be 'Build failed'
     }
 
-    It 'returns Command completed for generic bash output' {
+    It 'includes command intent when description is present' {
+        $toolResult = [PSCustomObject]@{ resultType = 'success'; textResultForLlm = '15 tests passed, 0 failed' }
+        $result = Get-ToolSummary -ToolName 'bash' -ToolArgs '{"description":"Run login tests"}' -ToolResult $toolResult
+        $result | Should -Be 'Run login tests. 15 tests passed'
+    }
+
+    It 'returns null for generic bash output without context' {
         $toolResult = [PSCustomObject]@{ resultType = 'success'; textResultForLlm = 'some arbitrary output' }
         $result = Get-ToolSummary -ToolName 'bash' -ToolArgs '{}' -ToolResult $toolResult
-        $result | Should -Be 'Command completed'
+        $result | Should -BeNullOrEmpty
     }
 
     It 'returns null for unknown tool names' {
@@ -228,6 +234,54 @@ Describe 'Get-ToolSummary' {
     It 'handles null ToolArgs gracefully' {
         $result = Get-ToolSummary -ToolName 'edit' -ToolArgs $null -ToolResult $null
         $result | Should -Be 'File edited'
+    }
+}
+
+Describe 'Repo activity state' {
+    BeforeEach {
+        $script:StateFile = Join-Path $env:TEMP "voice-status-state-test-$([System.Guid]::NewGuid().ToString('N').Substring(0,8)).json"
+        Remove-Item $script:StateFile -Force -ErrorAction SilentlyContinue
+    }
+    AfterEach {
+        if (Test-Path $script:StateFile) { Remove-Item $script:StateFile -Force -ErrorAction SilentlyContinue }
+    }
+
+    It 'stores repo activity by cwd' {
+        Update-RepoActivity -Cwd 'C:\repo-a' -TaskSummary 'Fix auth bug' -Milestone 'Edited auth.ts' -Outcome '15 tests passed' -Reset | Out-Null
+        $activity = Get-RepoActivity -Cwd 'C:\repo-a'
+        $activity.taskSummary | Should -Be 'Fix auth bug'
+        @($activity.milestones) | Should -Contain 'Edited auth.ts'
+        $activity.latestOutcome | Should -Be '15 tests passed'
+    }
+
+    It 'resets milestones and outcomes when Reset is used' {
+        Update-RepoActivity -Cwd 'C:\repo-a' -TaskSummary 'Old task' -Milestone 'Edited old.ts' -Outcome 'Build failed' -Reset | Out-Null
+        Update-RepoActivity -Cwd 'C:\repo-a' -TaskSummary 'New task' -Reset | Out-Null
+        $activity = Get-RepoActivity -Cwd 'C:\repo-a'
+        $activity.taskSummary | Should -Be 'New task'
+        @($activity.milestones).Count | Should -Be 0
+        $activity.latestOutcome | Should -Be ''
+    }
+
+    It 'builds a contextual recap from task milestones and outcome' {
+        Update-RepoActivity -Cwd 'C:\repo-a' -TaskSummary 'Fix auth bug' -Milestone 'Edited auth.ts' -Outcome '15 tests passed' -Reset | Out-Null
+        $recap = Build-SessionRecap -Cwd 'C:\repo-a' -Reason 'complete'
+        $recap | Should -Match 'Task complete: Fix auth bug'
+        $recap | Should -Match 'Edited auth.ts'
+        $recap | Should -Match '15 tests passed'
+    }
+
+    It 'falls back to a generic reason when no activity exists' {
+        $recap = Build-SessionRecap -Cwd 'C:\repo-a' -Reason 'abort'
+        $recap | Should -Be 'Session aborted'
+    }
+
+    It 'clears only the matching repo activity' {
+        Update-RepoActivity -Cwd 'C:\repo-a' -TaskSummary 'Task A' -Reset | Out-Null
+        Update-RepoActivity -Cwd 'C:\repo-b' -TaskSummary 'Task B' -Reset | Out-Null
+        Clear-RepoActivity -Cwd 'C:\repo-a'
+        (Get-RepoActivity -Cwd 'C:\repo-a').taskSummary | Should -Be ''
+        (Get-RepoActivity -Cwd 'C:\repo-b').taskSummary | Should -Be 'Task B'
     }
 }
 

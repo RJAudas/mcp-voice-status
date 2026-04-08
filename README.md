@@ -1,13 +1,14 @@
 # Voice Status Hooks
 
-Audible spoken status updates for GitHub Copilot agents on Windows — hands-free awareness of what your AI is doing.
+Audible spoken status updates for GitHub Copilot agents on Windows — hands-free awareness of what your AI is doing and why.
 
-Hook scripts fire **automatically** at agent lifecycle points (session start/end, tool use, prompts, errors) and speak brief summaries via Windows built-in text-to-speech. **Zero agent cooperation needed** — no system prompt changes, no explicit tool calls, no Node.js.
+Hook scripts fire **automatically** at agent lifecycle points (session start/end, tool use, prompts, errors), keep lightweight session state, and speak brief summaries plus a final recap via Windows built-in text-to-speech. **Zero agent cooperation needed** — no system prompt changes, no explicit tool calls, no Node.js.
 
 ## Features
 
-- 🗣️ **Session announcements** — Hear when a session starts, what task began, and when it ends
-- 🔧 **Tool completion summaries** — "Edited auth.ts", "15 tests passed", "Build succeeded"
+- 🗣️ **Task-aware announcements** — Hear what the agent started working on, not just that a session began
+- 🔧 **High-signal milestone summaries** — "Edited auth.ts", "Run login tests. 15 tests passed", "Build failed"
+- ✅ **Final recap** — Hear what the agent worked on and the key outcome at session end
 - 🔇 **Smart filtering** — Only speaks for meaningful actions; silently skips read-only tools (view, grep, glob)
 - ⏱️ **Rate limiting** — Default 3-second minimum interval prevents audio spam
 - 🔄 **Deduplication** — Identical messages within 10 seconds are silently dropped
@@ -53,14 +54,14 @@ For detailed setup instructions, see [docs/setup.md](docs/setup.md).
 
 | Event | Example Spoken Output |
 |-------|-----------------------|
-| Session starts | "Session started. Fix the auth bug in login" |
-| New prompt submitted | "New task: add unit tests for login" |
+| Session starts | "Working on: fix the auth bug in login" |
+| New prompt submitted | "Now working on: add unit tests for login" |
 | File edited | "Edited auth-controller.ts" |
 | File created | "Created test-helpers.ps1" |
-| Tests run | "15 tests passed" or "3 tests failed" |
+| Tests run | "Run login tests. 15 tests passed" or "3 tests failed" |
 | Build completes | "Build succeeded" or "Build failed" |
 | Error occurs | "Error: TimeoutError. Network timeout after 30s" |
-| Session ends | "Session complete" or "Session aborted" |
+| Session ends | "Task complete: fix the auth bug. Edited auth-controller.ts. 15 tests passed" |
 | Noisy tool (view/grep/glob) | *(silence)* |
 
 ## Configuration
@@ -101,10 +102,10 @@ $env:VOICE_STATUS_RATE_LIMIT_MS = "5000"
 
 | Hook Event | Script | Behavior |
 |-----------|--------|---------|
-| `sessionStart` | `on-session-start.ps1` | Speaks summary of initial prompt |
-| `sessionEnd` | `on-session-end.ps1` | Speaks completion reason |
-| `userPromptSubmitted` | `on-prompt-submitted.ps1` | Speaks new instruction summary |
-| `postToolUse` | `on-post-tool-use.ps1` | Speaks for interesting tools; silent for noisy |
+| `sessionStart` | `on-session-start.ps1` | Stores task context and speaks a brief work summary |
+| `sessionEnd` | `on-session-end.ps1` | Speaks a recap built from stored task and milestone state |
+| `userPromptSubmitted` | `on-prompt-submitted.ps1` | Resets task context and speaks the new work summary |
+| `postToolUse` | `on-post-tool-use.ps1` | Speaks for interesting tools, stores milestones/outcomes, stays silent for noisy tools |
 | `errorOccurred` | `on-error.ps1` | Speaks error name + message; bypasses rate limit |
 
 ## Repository Structure
@@ -114,7 +115,7 @@ $env:VOICE_STATUS_RATE_LIMIT_MS = "5000"
 ├── voice-status.json              # Hook configuration (Copilot hooks v1 protocol)
 └── scripts/
     ├── voice-status-config.json   # Voice settings (tool lists, rate limits, voice prefs)
-    ├── voice-status-common.ps1    # Shared: TTS, sanitization, rate limiting, dedup, config
+    ├── voice-status-common.ps1    # Shared: TTS, sanitization, rate limiting, dedup, activity state
     ├── on-session-start.ps1
     ├── on-session-end.ps1
     ├── on-prompt-submitted.ps1
@@ -157,6 +158,11 @@ See [docs/testing-guide.md](docs/testing-guide.md) for manual testing with sampl
 **Hooks not firing (CLI):**
 - Ensure `.github/hooks/voice-status.json` exists in the repository root
 - Run the CLI from the repo root directory
+
+**Recap sounds stale or incomplete:**
+- Clear the local state file: `Remove-Item "$env:TEMP\voice-status-state.json" -Force -ErrorAction SilentlyContinue`
+- Current hook payloads do not expose a stable session ID, so the summary state is **best-effort and repo-scoped**
+- For the most reliable recap, use one active Copilot session per repo at a time
 
 **PowerShell execution policy error during hook runs:**
 The bundled hook config already launches scripts with `-NoProfile -ExecutionPolicy Bypass`, so hook execution should not require a permanent machine-level policy change. If you still see this while using the hooks, make sure you are using the updated `.github/hooks/voice-status.json` from this repository.

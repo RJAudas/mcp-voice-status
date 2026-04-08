@@ -106,6 +106,19 @@ function Sanitize-TextForTTS {
 
 #endregion
 
+function Limit-ContextText {
+    param([string]$Text, [int]$MaxLength = 120)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
+
+    $normalized = ($Text -replace '\s+', ' ').Trim()
+    if ($normalized.Length -gt $MaxLength) {
+        return $normalized.Substring(0, $MaxLength).TrimEnd()
+    }
+
+    return $normalized
+}
+
 #region Fire-and-Forget TTS (T008)
 
 function Invoke-Speech {
@@ -166,10 +179,8 @@ function Get-ToolSummary {
         [object]$ToolResult
     )
 
-    $resultText = ''
-    if ($null -ne $ToolResult -and -not [string]::IsNullOrWhiteSpace($ToolResult.textResultForLlm)) {
-        $resultText = $ToolResult.textResultForLlm
-    }
+    $resultText = Get-ToolResultText -ToolResult $ToolResult
+    $resultType = Get-ToolResultType -ToolResult $ToolResult
 
     switch ($ToolName) {
         { $_ -in @('edit', 'replace_string_in_file', 'multi_replace_string_in_file') } {
@@ -182,16 +193,43 @@ function Get-ToolSummary {
             if ($filename) { return "Created $filename" }
             return 'File created'
         }
-        { $_ -in @('bash', 'powershell', 'write_powershell', 'run_in_terminal') } {
-            return Get-CommandSummary -Output $resultText -ToolArgs $ToolArgs
-        }
-        'task' {
-            return 'Task completed'
+        { $_ -in @('bash', 'powershell', 'write_powershell', 'run_in_terminal', 'task') } {
+            return Get-CommandSummary -Output $resultText -ToolArgs $ToolArgs -ResultType $resultType
         }
         default {
             return $null  # Unknown/uninteresting — silent skip
         }
     }
+}
+
+function Get-ToolResultText {
+    param([object]$ToolResult)
+
+    if ($null -eq $ToolResult) { return '' }
+    if ($ToolResult -is [string]) { return [string]$ToolResult }
+
+    foreach ($propertyName in @('textResultForLlm', 'tool_response', 'output', 'message')) {
+        $property = $ToolResult.PSObject.Properties[$propertyName]
+        if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+            return [string]$property.Value
+        }
+    }
+
+    return ''
+}
+
+function Get-ToolResultType {
+    param([object]$ToolResult)
+
+    if ($null -eq $ToolResult) { return 'success' }
+    if ($ToolResult -is [string]) { return 'success' }
+
+    $property = $ToolResult.PSObject.Properties['resultType']
+    if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+        return ([string]$property.Value).ToLowerInvariant()
+    }
+
+    return 'success'
 }
 
 function Get-FilenameFromArgs {
@@ -214,67 +252,42 @@ function Get-FilenameFromArgs {
 }
 
 function Get-CommandSummary {
-    param([string]$Output, [string]$ToolArgs)
+    param([string]$Output, [string]$ToolArgs, [string]$ResultType = 'success')
 
-    # Use the goal or explanation field if present (run_in_terminal provides these)
-    if (-not [string]::IsNullOrWhiteSpace($ToolArgs)) {
-        try {
-            $parsedArgs = $ToolArgs | ConvertFrom-Json -ErrorAction Stop
-            $why = $null
-            foreach ($prop in @('goal', 'explanation')) {
-                $val = $parsedArgs.PSObject.Properties[$prop]
-                if ($null -ne $val -and -not [string]::IsNullOrWhiteSpace([string]$val.Value)) {
-                    $why = [string]$val.Value
-                    break
-                }
-            }
-            if ($why) {
-                # Still try to detect test/build results from output, prepend goal as context
-                $resultSummary = Get-OutputResultSummary $Output
-                if ($resultSummary) { return "$why. $resultSummary" }
-                return $why
-            }
-        } catch { }
+    $why = Get-ToolIntent -ToolArgs $ToolArgs
+    $resultSummary = Get-OutputResultSummary -Output $Output
+
+    if ($resultSummary) {
+        if ($why) { return "$why. $resultSummary" }
+        return $resultSummary
     }
 
-    if ([string]::IsNullOrWhiteSpace($Output)) { return 'Command completed' }
+    if ($ResultType -eq 'failure') {
+        if ($why) { return "$why failed" }
+        if (-not [string]::IsNullOrWhiteSpace($Output)) { return Limit-ContextText -Text $Output -MaxLength 120 }
+        return 'Command failed'
+    }
 
-    $o = $Output.ToLower()
+    if ($why) { return $why }
+    return $null
+}
 
-    # Test results: "N tests passed" / "N tests failed"
-    if ($o -match '(\d+)\s+(?:tests?|specs?|examples?)\s+passed' -or
-        $o -match 'all\s+(\d+)\s+(?:tests?|specs?)\s+passed' -or
-        $o -match '(\d+)\s+passing') {
-        $passed = $Matches[1]
-        if ($o -match '(\d+)\s+(?:tests?|specs?|examples?)\s+failed' -or
-            $o -match '(\d+)\s+failing') {
-            $failed = $Matches[1]
-            return "$passed passed, $failed failed"
+function Get-ToolIntent {
+    param([string]$ToolArgs)
+
+    if ([string]::IsNullOrWhiteSpace($ToolArgs)) { return $null }
+
+    try {
+        $parsedArgs = $ToolArgs | ConvertFrom-Json -ErrorAction Stop
+        foreach ($propertyName in @('goal', 'explanation', 'description', 'summary', 'intent')) {
+            $property = $parsedArgs.PSObject.Properties[$propertyName]
+            if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+                return Limit-ContextText -Text ([string]$property.Value) -MaxLength 100
+            }
         }
-        return "$passed tests passed"
-    }
-    if ($o -match '(\d+)\s+(?:tests?|specs?|examples?)\s+failed' -or
-        $o -match '(\d+)\s+failing') {
-        return "$($Matches[1]) tests failed"
-    }
+    } catch { }
 
-    # Build results
-    if ($o -match 'build\s+succeeded' -or $o -match 'build\s+success') { return 'Build succeeded' }
-    if ($o -match 'build\s+failed' -or $o -match 'build\s+error') { return 'Build failed' }
-
-    # Lint results: "N errors, M warnings" or "X problems (Y errors, Z warnings)"
-    if ($o -match '(\d+)\s+errors?,\s*(\d+)\s+warnings?') {
-        $errors   = $Matches[1]
-        $warnings = $Matches[2]
-        if ($errors -eq '0' -and $warnings -eq '0') { return 'Lint passed' }
-        if ($errors -eq '0') { return "Lint: $warnings warnings" }
-        return "Lint: $errors errors, $warnings warnings"
-    }
-    if ($o -match '(\d+)\s+problems?' -and $o -match '(\d+)\s+errors?') {
-        return "Lint: $($Matches[1]) problems"
-    }
-
-    return 'Command completed'
+    return $null
 }
 
 # Extract a structured result summary from command output (test/build/lint patterns).
@@ -285,6 +298,16 @@ function Get-OutputResultSummary {
 
     $o = $Output.ToLower()
 
+    # Pester 5 format: "Tests Passed: 15, Failed: 0, Skipped: 0 NotRun: 0"
+    if ($o -match 'tests\s+passed:\s*(\d+)') {
+        $passed = $Matches[1]
+        if ($o -match 'failed:\s*(\d+)' -and [int]$Matches[1] -gt 0) {
+            return "$passed passed, $($Matches[1]) failed"
+        }
+        return "$passed tests passed"
+    }
+
+    # Generic xUnit / Mocha / Jest style: "15 tests passed", "15 passing"
     if ($o -match '(\d+)\s+(?:tests?|specs?|examples?)\s+passed' -or
         $o -match 'all\s+(\d+)\s+(?:tests?|specs?)\s+passed' -or
         $o -match '(\d+)\s+passing') {
@@ -297,6 +320,7 @@ function Get-OutputResultSummary {
     if ($o -match '(\d+)\s+(?:tests?|specs?|examples?)\s+failed' -or $o -match '(\d+)\s+failing') {
         return "$($Matches[1]) tests failed"
     }
+
     if ($o -match 'build\s+succeeded' -or $o -match 'build\s+success') { return 'Build succeeded' }
     if ($o -match 'build\s+failed' -or $o -match 'build\s+error') { return 'Build failed' }
     if ($o -match '(\d+)\s+errors?,\s*(\d+)\s+warnings?') {
@@ -323,14 +347,209 @@ function Test-IsInterestingTool {
 
 $script:StateFile = Join-Path $env:TEMP "voice-status-state.json"
 
-function Get-SpeechState {
+function New-VoiceState {
+    return [PSCustomObject]@{
+        lastSpokenAt   = 0
+        recentMessages = @()
+        repoActivities = @()
+    }
+}
+
+function New-RepoActivity {
+    param([string]$Cwd = '')
+
+    return [PSCustomObject]@{
+        cwd           = $Cwd
+        taskSummary   = ''
+        whySummary    = ''
+        milestones    = @()
+        latestOutcome = ''
+        lastReason    = ''
+        lastUpdatedAt = 0
+    }
+}
+
+function Get-StateData {
+    $state = $null
+
     try {
         if (Test-Path $script:StateFile) {
             $raw = Get-Content $script:StateFile -Raw -ErrorAction Stop
-            return $raw | ConvertFrom-Json -ErrorAction Stop
+            if (-not [string]::IsNullOrWhiteSpace($raw)) {
+                $state = $raw | ConvertFrom-Json -ErrorAction Stop
+            }
         }
-    } catch { }
-    return [PSCustomObject]@{ lastSpokenAt = 0; recentMessages = @() }
+    } catch {
+        $state = $null
+    }
+
+    if ($null -eq $state) {
+        return New-VoiceState
+    }
+
+    if ($null -eq $state.PSObject.Properties['lastSpokenAt']) {
+        $state | Add-Member -NotePropertyName 'lastSpokenAt' -NotePropertyValue 0
+    }
+    if ($null -eq $state.PSObject.Properties['recentMessages']) {
+        $state | Add-Member -NotePropertyName 'recentMessages' -NotePropertyValue @()
+    }
+    if ($null -eq $state.PSObject.Properties['repoActivities']) {
+        $state | Add-Member -NotePropertyName 'repoActivities' -NotePropertyValue @()
+    }
+
+    return $state
+}
+
+function Save-StateData {
+    param([object]$State)
+
+    $tmp = $script:StateFile + ".tmp"
+    try {
+        $State | ConvertTo-Json -Compress -Depth 10 | Set-Content -Path $tmp -Encoding UTF8 -ErrorAction Stop
+        Move-Item -Path $tmp -Destination $script:StateFile -Force -ErrorAction Stop
+    } catch {
+        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Normalize-RepoPath {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return '' }
+    return $Path.Trim().Replace('/', '\').ToLowerInvariant()
+}
+
+function Test-IsSameRepoPath {
+    param([string]$Left, [string]$Right)
+
+    return (Normalize-RepoPath -Path $Left) -eq (Normalize-RepoPath -Path $Right)
+}
+
+function Add-UniqueSummaryText {
+    param([object[]]$Existing, [string]$NewText, [int]$MaxItems = 3)
+
+    $text = Limit-ContextText -Text $NewText -MaxLength 100
+    if ([string]::IsNullOrWhiteSpace($text)) { return @($Existing) }
+
+    $items = [System.Collections.Generic.List[string]]::new()
+    foreach ($item in @($Existing)) {
+        $value = [string]$item
+        if ([string]::IsNullOrWhiteSpace($value)) { continue }
+        if ($value.ToLowerInvariant() -eq $text.ToLowerInvariant()) { continue }
+        $items.Add($value)
+    }
+
+    $items.Add($text)
+    while ($items.Count -gt $MaxItems) {
+        $items.RemoveAt(0)
+    }
+
+    return @($items)
+}
+
+function Get-RepoActivity {
+    param([string]$Cwd)
+
+    $state = Get-StateData
+    foreach ($entry in @($state.repoActivities)) {
+        if ($null -eq $entry) { continue }
+        if (Test-IsSameRepoPath -Left ([string]$entry.cwd) -Right $Cwd) {
+            if ($null -eq $entry.PSObject.Properties['taskSummary']) {
+                $entry | Add-Member -NotePropertyName 'taskSummary' -NotePropertyValue ''
+            }
+            if ($null -eq $entry.PSObject.Properties['whySummary']) {
+                $entry | Add-Member -NotePropertyName 'whySummary' -NotePropertyValue ''
+            }
+            if ($null -eq $entry.PSObject.Properties['milestones']) {
+                $entry | Add-Member -NotePropertyName 'milestones' -NotePropertyValue @()
+            }
+            if ($null -eq $entry.PSObject.Properties['latestOutcome']) {
+                $entry | Add-Member -NotePropertyName 'latestOutcome' -NotePropertyValue ''
+            }
+            if ($null -eq $entry.PSObject.Properties['lastReason']) {
+                $entry | Add-Member -NotePropertyName 'lastReason' -NotePropertyValue ''
+            }
+            if ($null -eq $entry.PSObject.Properties['lastUpdatedAt']) {
+                $entry | Add-Member -NotePropertyName 'lastUpdatedAt' -NotePropertyValue 0
+            }
+            return $entry
+        }
+    }
+
+    return New-RepoActivity -Cwd $Cwd
+}
+
+function Update-RepoActivity {
+    param(
+        [string]$Cwd,
+        [string]$TaskSummary = '',
+        [string]$WhySummary = '',
+        [string]$Milestone = '',
+        [string]$Outcome = '',
+        [string]$LastReason = '',
+        [switch]$Reset
+    )
+
+    $state = Get-StateData
+    $activity = if ($Reset) { New-RepoActivity -Cwd $Cwd } else { Get-RepoActivity -Cwd $Cwd }
+
+    if (-not [string]::IsNullOrWhiteSpace($TaskSummary)) {
+        $activity.taskSummary = Limit-ContextText -Text $TaskSummary -MaxLength 110
+    }
+    if (-not [string]::IsNullOrWhiteSpace($WhySummary)) {
+        $activity.whySummary = Limit-ContextText -Text $WhySummary -MaxLength 100
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Milestone)) {
+        $activity.milestones = Add-UniqueSummaryText -Existing @($activity.milestones) -NewText $Milestone -MaxItems 3
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Outcome)) {
+        $activity.latestOutcome = Limit-ContextText -Text $Outcome -MaxLength 100
+    }
+    if (-not [string]::IsNullOrWhiteSpace($LastReason)) {
+        $activity.lastReason = $LastReason
+    }
+    $activity.lastUpdatedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+
+    $updatedActivities = [System.Collections.Generic.List[object]]::new()
+    $replaced = $false
+    foreach ($entry in @($state.repoActivities)) {
+        if ($null -eq $entry) { continue }
+        if (-not $replaced -and (Test-IsSameRepoPath -Left ([string]$entry.cwd) -Right $Cwd)) {
+            $updatedActivities.Add($activity)
+            $replaced = $true
+            continue
+        }
+        $updatedActivities.Add($entry)
+    }
+    if (-not $replaced) {
+        $updatedActivities.Add($activity)
+    }
+
+    $state.repoActivities = @($updatedActivities)
+    Save-StateData -State $state
+
+    return $activity
+}
+
+function Clear-RepoActivity {
+    param([string]$Cwd)
+
+    if ([string]::IsNullOrWhiteSpace($Cwd)) { return }
+
+    $state = Get-StateData
+    $remaining = [System.Collections.Generic.List[object]]::new()
+    foreach ($entry in @($state.repoActivities)) {
+        if ($null -eq $entry) { continue }
+        if (Test-IsSameRepoPath -Left ([string]$entry.cwd) -Right $Cwd) { continue }
+        $remaining.Add($entry)
+    }
+
+    $state.repoActivities = @($remaining)
+    Save-StateData -State $state
+}
+
+function Get-SpeechState {
+    return Get-StateData
 }
 
 function Update-SpeechState {
@@ -348,15 +567,7 @@ function Update-SpeechState {
     $messages = $messages | Where-Object { $_.spokenAt -gt $cutoff }
 
     $state.recentMessages = $messages
-
-    # Atomic write: write to temp then move
-    $tmp = $script:StateFile + ".tmp"
-    try {
-        $state | ConvertTo-Json -Compress | Set-Content -Path $tmp -Encoding UTF8 -ErrorAction Stop
-        Move-Item -Path $tmp -Destination $script:StateFile -Force -ErrorAction Stop
-    } catch {
-        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
-    }
+    Save-StateData -State $state
 }
 
 function Test-RateLimited {
@@ -398,6 +609,81 @@ function Get-MessageHash {
     $hash  = $sha.ComputeHash($bytes)
     $sha.Dispose()
     return [System.BitConverter]::ToString($hash).Replace('-', '').Substring(0, 16)
+}
+
+function Add-RecapPart {
+    param([System.Collections.Generic.List[string]]$Parts, [string]$Text)
+
+    $candidate = Limit-ContextText -Text $Text -MaxLength 100
+    if ([string]::IsNullOrWhiteSpace($candidate)) { return }
+
+    foreach ($existing in $Parts) {
+        if ($existing.ToLowerInvariant() -eq $candidate.ToLowerInvariant()) {
+            return
+        }
+    }
+
+    $Parts.Add($candidate)
+}
+
+function Build-SessionRecap {
+    param([string]$Cwd, [string]$Reason = 'complete')
+
+    $fallbackMap = @{
+        'complete'  = 'Session complete'
+        'error'     = 'Session ended with error'
+        'abort'     = 'Session aborted'
+        'timeout'   = 'Session timed out'
+        'user_exit' = 'Session ended'
+    }
+
+    $activity = Get-RepoActivity -Cwd $Cwd
+    $task = Limit-ContextText -Text $activity.taskSummary -MaxLength 90
+
+    $parts = [System.Collections.Generic.List[string]]::new()
+    switch ($Reason) {
+        'complete' {
+            if ($task) { $parts.Add("Task complete: $task") } else { $parts.Add($fallbackMap['complete']) }
+        }
+        'error' {
+            if ($task) { $parts.Add("Task failed: $task") } else { $parts.Add($fallbackMap['error']) }
+        }
+        'abort' {
+            if ($task) { $parts.Add("Stopped: $task") } else { $parts.Add($fallbackMap['abort']) }
+        }
+        'timeout' {
+            if ($task) { $parts.Add("Timed out on: $task") } else { $parts.Add($fallbackMap['timeout']) }
+        }
+        'user_exit' {
+            if ($task) { $parts.Add("Stopped: $task") } else { $parts.Add($fallbackMap['user_exit']) }
+        }
+        default {
+            if ($task) { $parts.Add("Session ended: $task") } else { $parts.Add('Session ended') }
+        }
+    }
+
+    $detailParts = [System.Collections.Generic.List[string]]::new()
+    if (-not [string]::IsNullOrWhiteSpace($activity.whySummary) -and
+        $activity.whySummary.ToLowerInvariant() -ne $task.ToLowerInvariant()) {
+        Add-RecapPart -Parts $detailParts -Text $activity.whySummary
+    }
+    foreach ($milestone in @($activity.milestones | Select-Object -Last 2)) {
+        Add-RecapPart -Parts $detailParts -Text ([string]$milestone)
+    }
+    Add-RecapPart -Parts $detailParts -Text $activity.latestOutcome
+
+    if ($detailParts.Count -eq 0 -and [string]::IsNullOrWhiteSpace($task)) {
+        $fallback = if ($fallbackMap.ContainsKey($Reason)) { $fallbackMap[$Reason] } else { 'Session ended' }
+        return Sanitize-TextForTTS -Text $fallback
+    }
+
+    foreach ($detail in $detailParts) {
+        $candidate = @($parts + $detail) -join '. '
+        if ((Sanitize-TextForTTS -Text $candidate).Length -gt 200) { break }
+        $parts.Add($detail)
+    }
+
+    return Sanitize-TextForTTS -Text ($parts -join '. ')
 }
 
 #endregion

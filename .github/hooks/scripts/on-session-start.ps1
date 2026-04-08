@@ -19,11 +19,13 @@ if ($null -eq $payload) { exit 0 }
 
 $config = Get-VoiceStatusConfig
 
-# Compose message
-$prompt = if ($payload.initialPrompt) { [string]$payload.initialPrompt } else { '' }
-if ($prompt.Length -gt 150) { $prompt = $prompt.Substring(0, 150) }
+# Compose message and reset the repo activity for a fresh session summary.
+$cwd    = if ($payload.cwd) { [string]$payload.cwd } else { '' }
+$prompt = if ($payload.initialPrompt) { Limit-ContextText -Text ([string]$payload.initialPrompt) -MaxLength 110 } else { '' }
 
-$message = if ($prompt) { "Session started. $prompt" } else { 'Session started' }
+Update-RepoActivity -Cwd $cwd -TaskSummary $prompt -Reset | Out-Null
+
+$message = if ($prompt) { "Working on: $prompt" } else { 'Starting work' }
 $message = Sanitize-TextForTTS -Text $message
 
 if ([string]::IsNullOrWhiteSpace($message)) { exit 0 }

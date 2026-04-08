@@ -1,6 +1,6 @@
 # Setup & Installation Guide
 
-This guide walks you through installing Voice Status Hooks into your repository so that GitHub Copilot speaks brief status updates as it works.
+This guide walks you through installing Voice Status Hooks into your repository so that GitHub Copilot speaks brief task summaries, meaningful milestones, and a final recap as it works.
 
 ## Step 1: Check Prerequisites
 
@@ -104,7 +104,7 @@ git commit -m "Add voice status hooks for Copilot agent"
 git push origin main
 ```
 
-Once pushed, start a new Copilot agent session — you should hear "Session started" when it begins.
+Once pushed, start a new Copilot agent session — you should hear a task-oriented summary such as "Working on: fix the bug in auth.ts" when it begins.
 
 ### For GitHub Copilot CLI
 
@@ -164,7 +164,9 @@ Edit `voice-status-config.json` and adjust `voiceRate` (-10 to 10, default 0):
 
 ### State file issues (duplicate/missing speech)
 
-The rate limiter/dedup state lives at `$env:TEMP\voice-status-state.json`. To reset:
+The rate limiter, deduplication, and session recap state live at `$env:TEMP\voice-status-state.json`. To reset:
 ```powershell
 Remove-Item "$env:TEMP\voice-status-state.json" -Force -ErrorAction SilentlyContinue
 ```
+
+Current hook payloads do not provide a stable session ID, so recap state is tracked on a best-effort, repo-scoped basis. For the most reliable summaries, run one active Copilot session per repo.

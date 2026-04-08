@@ -22,18 +22,40 @@ Describe 'on-session-start.ps1' {
         $json = New-MockPayload 'sessionStart' @{ source = 'new'; initialPrompt = 'Fix the auth bug' }
         & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-start.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
+        $activity = Get-RepoActivityFromStateFile -Path $script:StateFile
+        $activity.taskSummary | Should -Be 'Fix the auth bug'
     }
 
-    It 'exits 0 with missing/empty initialPrompt' {
+    It 'resets any previous session activity when a new session starts' {
+        @{
+            lastSpokenAt   = 0
+            recentMessages = @()
+            repoActivities = @(@{
+                cwd           = 'C:\repo'
+                taskSummary   = 'Old work'
+                whySummary    = ''
+                milestones    = @('Edited old-file.ps1')
+                latestOutcome = 'Build failed'
+                lastReason    = ''
+                lastUpdatedAt = 0
+            })
+        } | ConvertTo-Json -Depth 10 | Set-Content $script:StateFile
+
         $json = New-MockPayload 'sessionStart' @{ initialPrompt = '' }
         & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-start.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
+        $activity = Get-RepoActivityFromStateFile -Path $script:StateFile
+        $activity.taskSummary | Should -Be ''
+        @($activity.milestones).Count | Should -Be 0
+        $activity.latestOutcome | Should -Be ''
     }
 
     It 'exits 0 with source=resume' {
         $json = New-MockPayload 'sessionStart' @{ source = 'resume'; initialPrompt = 'Resuming work on tests' }
         & (Join-Path $PSScriptRoot "..\.github\hooks\scripts\on-session-start.ps1") -InputJson $json
         $LASTEXITCODE | Should -Be 0
+        $activity = Get-RepoActivityFromStateFile -Path $script:StateFile
+        $activity.taskSummary | Should -Be 'Resuming work on tests'
     }
 
     It 'exits 0 with malformed JSON (no crash)' {

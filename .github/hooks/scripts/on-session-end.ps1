@@ -14,24 +14,19 @@ if ($null -eq $payload) { exit 0 }
 
 $config = Get-VoiceStatusConfig
 
-$reasonMap = @{
-    'complete'   = 'Session complete'
-    'error'      = 'Session ended with error'
-    'abort'      = 'Session aborted'
-    'timeout'    = 'Session timed out'
-    'user_exit'  = 'Session ended'
-}
-
+$cwd     = if ($payload.cwd) { [string]$payload.cwd } else { '' }
 $reason  = if ($payload.reason) { [string]$payload.reason } else { 'complete' }
-$message = if ($reasonMap.ContainsKey($reason)) { $reasonMap[$reason] } else { 'Session ended' }
-$message = Sanitize-TextForTTS -Text $message
+$message = Build-SessionRecap -Cwd $cwd -Reason $reason
 
 if ([string]::IsNullOrWhiteSpace($message)) { exit 0 }
 
-if (Test-RateLimited -Config $config) { exit 0 }
-if (Test-IsDuplicate -Message $message -Config $config) { exit 0 }
+if (Test-IsDuplicate -Message $message -Config $config) {
+    Clear-RepoActivity -Cwd $cwd
+    exit 0
+}
 
 Invoke-Speech -Text $message -Config $config
 Update-SpeechState -SpokenAt ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()) -MessageHash (Get-MessageHash $message)
+Clear-RepoActivity -Cwd $cwd
 
 exit 0

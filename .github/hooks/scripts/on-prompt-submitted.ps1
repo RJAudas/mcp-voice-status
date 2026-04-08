@@ -14,15 +14,13 @@ if ($null -eq $payload) { exit 0 }
 
 $config = Get-VoiceStatusConfig
 
-$prompt = if ($payload.prompt) { [string]$payload.prompt } else { '' }
+$cwd    = if ($payload.cwd) { [string]$payload.cwd } else { '' }
+$prompt = if ($payload.prompt) { Limit-ContextText -Text ([string]$payload.prompt) -MaxLength 110 } else { '' }
 if ([string]::IsNullOrWhiteSpace($prompt)) { exit 0 }
 
-# "New task: " prefix = 10 chars; leave ~180 for the prompt
-$prefix    = 'New task: '
-$maxPrompt = 200 - $prefix.Length
-if ($prompt.Length -gt $maxPrompt) { $prompt = $prompt.Substring(0, $maxPrompt) }
+Update-RepoActivity -Cwd $cwd -TaskSummary $prompt -Reset | Out-Null
 
-$message = Sanitize-TextForTTS -Text ($prefix + $prompt)
+$message = Sanitize-TextForTTS -Text ("Now working on: " + $prompt)
 if ([string]::IsNullOrWhiteSpace($message)) { exit 0 }
 
 if (Test-RateLimited -Config $config) { exit 0 }

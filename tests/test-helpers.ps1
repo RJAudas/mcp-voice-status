@@ -71,6 +71,34 @@ function Remove-TempStateFile {
     if ($Path -and (Test-Path $Path)) { Remove-Item $Path -Force -ErrorAction SilentlyContinue }
 }
 
+function Get-StateFileData {
+    param([string]$Path = (Join-Path $env:TEMP "voice-status-state.json"))
+
+    if (-not (Test-Path $Path)) { return $null }
+    return Get-Content $Path -Raw | ConvertFrom-Json
+}
+
+function Get-RepoActivityFromStateFile {
+    param(
+        [string]$Path = (Join-Path $env:TEMP "voice-status-state.json"),
+        [string]$Cwd = "C:\repo"
+    )
+
+    $state = Get-StateFileData -Path $Path
+    if ($null -eq $state -or $null -eq $state.repoActivities) { return $null }
+
+    $normalized = $Cwd.Trim().Replace('/', '\').ToLowerInvariant()
+    foreach ($entry in @($state.repoActivities)) {
+        if ($null -eq $entry) { continue }
+        if ([string]::IsNullOrWhiteSpace([string]$entry.cwd)) { continue }
+        if (($entry.cwd.ToString().Trim().Replace('/', '\').ToLowerInvariant()) -eq $normalized) {
+            return $entry
+        }
+    }
+
+    return $null
+}
+
 # Captures spoken messages without audio output for testing
 $script:MockSpeechLog = [System.Collections.Generic.List[string]]::new()
 

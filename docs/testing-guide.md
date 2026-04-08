@@ -29,7 +29,7 @@ $synth.Dispose()
     powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass -File ".github\hooks\scripts\on-session-start.ps1"
 ```
 
-**Expected speech**: "Session started. Fix the authentication bug in login.ts"  
+**Expected speech**: "Working on: Fix the authentication bug in login.ts"  
 **Exit code**: `$LASTEXITCODE` should be `0`
 
 ---
@@ -41,24 +41,40 @@ $synth.Dispose()
     powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass -File ".github\hooks\scripts\on-session-start.ps1"
 ```
 
-**Expected speech**: "Session started. Continuing work on the test suite"
+**Expected speech**: "Working on: Continuing work on the test suite"
 
 ---
 
-## Test 3: Session End — Various Reasons
+## Test 3: Session End — Recap
 
 ```powershell
-# Complete
+# Reset state first
+Remove-Item "$env:TEMP\voice-status-state.json" -Force -ErrorAction SilentlyContinue
+
+'{"timestamp":"2026-01-01T00:00:00Z","cwd":".","source":"new","initialPrompt":"Fix the authentication bug in login.ts"}' |
+    powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass -File ".github\hooks\scripts\on-session-start.ps1"
+
+Start-Sleep -Seconds 4
+
+$payload = @{
+    timestamp  = "2026-01-01T00:00:00Z"
+    cwd        = "."
+    toolName   = "edit"
+    toolArgs   = '{"path":"src/login.ts"}'
+    toolResult = @{ resultType = "success"; textResultForLlm = "File updated." }
+} | ConvertTo-Json -Compress
+
+$payload | powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass -File ".github\hooks\scripts\on-post-tool-use.ps1"
+
+Start-Sleep -Seconds 4
+
 '{"timestamp":"2026-01-01T00:00:00Z","cwd":".","reason":"complete"}' |
     powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass -File ".github\hooks\scripts\on-session-end.ps1"
-# Expected: "Session complete"
-
-# Wait 4 seconds, then test abort (avoids rate limiting)
-Start-Sleep -Seconds 4
-'{"timestamp":"2026-01-01T00:00:00Z","cwd":".","reason":"abort"}' |
-    powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass -File ".github\hooks\scripts\on-session-end.ps1"
-# Expected: "Session aborted"
 ```
+
+**Expected speech**: A recap such as "Task complete: Fix the authentication bug in login.ts. Edited login.ts"
+
+**Fallback behavior**: If you trigger `on-session-end.ps1` without any prior task state, it falls back to a generic reason like "Session complete" or "Session aborted".
 
 ---
 
@@ -69,7 +85,7 @@ Start-Sleep -Seconds 4
     powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass -File ".github\hooks\scripts\on-prompt-submitted.ps1"
 ```
 
-**Expected speech**: "New task: Add unit tests for the login controller"
+**Expected speech**: "Now working on: Add unit tests for the login controller"
 
 ---
 
@@ -128,7 +144,7 @@ $payload = @{
 $payload | powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass -File ".github\hooks\scripts\on-post-tool-use.ps1"
 ```
 
-**Expected speech**: "15 passed, 2 failed" (or similar summary)
+**Expected speech**: "15 passed, 2 failed" (or similar summary). If `toolArgs` contains a `description` or `goal`, that context is prefixed.
 
 ---
 
@@ -151,7 +167,7 @@ $payload | powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass -File "
 
 ## Test 9: Rate Limiting
 
-Verify that a second message within 3 seconds is suppressed.
+Verify that a second non-error, non-session-end message within 3 seconds is suppressed.
 
 ```powershell
 # Reset state
@@ -163,12 +179,12 @@ $startPayload = '{"timestamp":"2026-01-01T00:00:00Z","cwd":".","source":"new","i
 $startPayload | powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass -File ".github\hooks\scripts\on-session-start.ps1"
 
 # Immediately fire a second event — should be silent (within 3s rate limit)
-'{"timestamp":"2026-01-01T00:00:00Z","cwd":".","reason":"complete"}' |
-    powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass -File ".github\hooks\scripts\on-session-end.ps1"
+'{"timestamp":"2026-01-01T00:00:00Z","cwd":".","prompt":"Second message"}' |
+    powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass -File ".github\hooks\scripts\on-prompt-submitted.ps1"
 ```
 
 **Expected**: First invocation speaks; second is **silent**.  
-**Verify**: Wait 4 seconds and retry the second command — it should speak this time.
+**Verify**: Wait 4 seconds and retry the second command — it should speak this time as "Now working on: Second message".
 
 ---
 
@@ -248,9 +264,9 @@ This test verifies hooks fire live during an actual agent session.
    gh copilot suggest "list the files in this directory"
    ```
 3. **Expected**:
-   - On session start: hear "Session started. list the files in this directory"
+   - On session start: hear "Working on: list the files in this directory"
    - On tool completion: hear tool summary (if an interesting tool fires)
-   - On session end: hear "Session complete"
+   - On session end: hear a recap based on stored context, usually starting with "Task complete:"
 
 ---
 
